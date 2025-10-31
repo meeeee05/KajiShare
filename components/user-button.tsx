@@ -6,10 +6,17 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { SignOut } from "./auth-components";
+import { SignIn, SignOut } from "./auth-components";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { auth } from "@/auth";
 
 export default async function UserButton() {
+
+  //セッションの取得(セッションがない場合はサインインコンポーネントを返す)
+  const session = await auth();
+  if (!session) return <SignIn />;
+
+
   return (
     <div className="flex gap-2 items-center">
       <span className="hidden text-sm sm:inline-flex"></span>
