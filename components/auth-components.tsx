@@ -1,12 +1,19 @@
 import React from "react";
 import { Button } from "./ui/button";
+import { sign } from "crypto";
+import { signIn } from "next-auth/react";
 
 export function SignIn({
   provider,
   ...props
 }: { provider?: string } & React.ComponentPropsWithRef<typeof Button>) {
   return (
-    <form>
+    <form 
+    action={async () => {
+      "useserver";
+      await signIn(provider);
+      }}
+      >
       <Button {...props}>サインイン</Button>
     </form>
   );

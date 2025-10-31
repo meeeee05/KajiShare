@@ -1,3 +1,4 @@
+"use client"
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -8,14 +9,13 @@ import {
 } from "./ui/dropdown-menu";
 import { SignIn, SignOut } from "./auth-components";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { auth } from "@/auth";
+import { useSession } from "next-auth/react";
 
-export default async function UserButton() {
-
-  //セッションの取得(セッションがない場合はサインインコンポーネントを返す)
-  const session = await auth();
-  if (!session) return <SignIn />;
-
+export default function UserButton() {
+  // クライアント側でセッション取得
+  const { data: session, status } = useSession();
+  if (status === "loading") return null;
+  if (!session) return <SignIn provider="google" />;
 
   return (
     <div className="flex gap-2 items-center">
