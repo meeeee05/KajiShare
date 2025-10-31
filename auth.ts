@@ -1,9 +1,16 @@
 import { request } from "http";
 import NextAuth, { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
+import GoogleProvider from "next-auth/providers/google";
 
 export const config: NextAuthConfig = {
-    providers: [Google],
+    //providers: [Google],
+    providers: [
+    GoogleProvider({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET
+  })
+],
     basePath: "/api/auth",
     callbacks: {
         authorized: ({ request, auth }) => {
