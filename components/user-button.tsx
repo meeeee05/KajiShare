@@ -23,7 +23,12 @@ export default function UserButton() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative w-8 h-8 rounded-full">
-            <Avatar className="w-8 h-8"></Avatar>
+            <Avatar className="w-8 h-8">
+              {session.user?.image && (
+                <AvatarImage src={session.user?.image} alt={session.user.name ?? ""} />
+              )}
+              console.log("user image:", session.user?.image);
+            </Avatar>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" forceMount>
