@@ -2,6 +2,7 @@ import React from "react";
 import { Button } from "./ui/button";
 import { sign } from "crypto";
 import { signIn } from "next-auth/react";
+import { signOut } from "next-auth/react";
 
 export function SignIn({
   provider,
@@ -24,10 +25,10 @@ export function SignOut({
   ...props
 }: { provider?: string } & React.ComponentPropsWithRef<typeof Button>) {
   return (
-    <form className="w-full">
-      <Button variant="ghost" className="w-full p-0" {...props}>
-        ログアウト
-      </Button>
-    </form>
+    <Button variant="ghost" className="w-full p-0" 
+    {...props} onClick={() => signOut()}
+      >
+      ログアウト
+    </Button>
   );
 }
