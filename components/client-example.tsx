@@ -34,6 +34,17 @@ console.log(session);
         </CustomLink>
         コンポーネントが必要です。
       </p>
+       <div className="flex flex-col rounded-md bg-neutral-100">
+        <div className="p-4 font-bold rounded-t-md bg-neutral-200">
+          Current Session
+        </div>
+        <pre className="py-6 px-4 whitespace-pre-wrap break-all">
+          {status === "loading" ? <div>Loading...</div>
+        : (
+         <>{JSON.stringify(session, null, 2)}</>
+        )}
+        </pre>
+      </div>
     </div>
   );
 }
