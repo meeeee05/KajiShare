@@ -1,9 +1,17 @@
+"use client";
+
+import { use } from "react";
 import CustomLink from "./custom-link";
+import { useSession } from "next-auth/react";
 
 export default function ClientExample() {
+
+const {data: session, status} = useSession();
+console.log(session);
+
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-3xl font-bold">クライアントサイドレンダリング</h1>
+      <h1 className="text-3xl font-bold">クライアントサイドのセッション取得</h1>
       <p>
         このページでは
         <CustomLink href="https://nextjs.authjs.dev/react#usesession">
