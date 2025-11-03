@@ -27,7 +27,6 @@ export default function UserButton() {
               {session.user?.image && (
                 <AvatarImage src={session.user?.image} alt={session.user.name ?? ""} />
               )}
-              console.log("user image:", session.user?.image);
               <AvatarFallback>{session.user?.email}</AvatarFallback>
             </Avatar>
           </Button>
