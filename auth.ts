@@ -4,7 +4,9 @@ import Google from "next-auth/providers/google";
 import GoogleProvider from "next-auth/providers/google";
 
 export const config: NextAuthConfig = {
-    //providers: [Google],
+    theme: {
+        logo: "https://next-auth.js.org/img/logo/logo-sm.png",
+    },
     providers: [
     GoogleProvider({
     clientId: process.env.GOOGLE_CLIENT_ID,

@@ -15,7 +15,7 @@ export default function UserButton() {
   // クライアント側でセッション取得
   const { data: session, status } = useSession();
   if (status === "loading") return null;
-  if (!session) return <SignIn provider="google" />;
+  if (!session) return <SignIn />;
 
   return (
     <div className="flex gap-2 items-center">
