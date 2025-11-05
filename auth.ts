@@ -1,7 +1,8 @@
 import { request } from "http";
-import NextAuth, { NextAuthConfig } from "next-auth";
+import NextAuth, { NextAuthConfig, DefaultSession } from "next-auth";
 import Google from "next-auth/providers/google";
 import GoogleProvider from "next-auth/providers/google";
+import "next-auth/jwt";
 
 export const config: NextAuthConfig = {
     theme: {
@@ -31,13 +32,42 @@ export const config: NextAuthConfig = {
             }
          },
 
-         jwt({token, trigger, session}) {
-            if (trigger === "update") token.name = session.user.name;
+         async jwt({ token, trigger, session, account }) {
+            //Google認証時にid_tokenをJWTに格納
+            if (account && account.id_token) {
+                token.idToken = account.id_token;
+            }
+            //セッション更新時にnameをJWTに格納
+            if (trigger === "update" && session?.user?.name) {
+                token.name = session.user.name;
+            }
             return token;
         },
- },
+
+        async session({ session, token }) 
+        {
+            session.user.idToken = token.idToken;
+            return session;
+        },
+  },
         
 };
+
+//JWT拡張（idTokenプロパティを追加）
+declare module "next-auth/jwt" {
+    interface JWT {
+        idToken?: string;
+    }
+}
+
+//Session拡張（idTokenをフロントエンドで確認）
+declare module "next-auth" {
+    interface Session {
+        user: {
+            idToken?: string;
+        } & DefaultSession["user"];
+    }
+}
 
 //APIハンドラ取得
 export const {handlers, auth, signIn, signOut, } = NextAuth(config);
