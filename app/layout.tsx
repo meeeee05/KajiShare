@@ -18,8 +18,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) 
 {
-  // layout.tsxではグローバルな認証リダイレクトは行わない
-  // 必要なページだけで認証チェック・リダイレクトを行う
+  //layout.tsxではグローバルな認証リダイレクトは行わない
+  //必要なページだけで認証チェック・リダイレクトを行う
   return (
     <html lang="en">
       <body className={inter.className}>
