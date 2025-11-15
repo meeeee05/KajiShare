@@ -28,7 +28,7 @@ export function SignOut({
     <Button variant="ghost" className="w-full p-0" 
     {...props} onClick={() => signOut()}
       >
-      ログアウト
+      サインアウト
     </Button>
   );
 }
