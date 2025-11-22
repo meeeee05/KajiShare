@@ -11,7 +11,7 @@ console.log(session);
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-3xl font-bold">クライアントサイドのセッション取得</h1>
+      <h1 className="text-3xl font-bold">クライアントサイド-セッション取得</h1>
       <p>
         このページでは
         <CustomLink href="https://nextjs.authjs.dev/react#usesession">
