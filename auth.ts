@@ -32,8 +32,10 @@ export const config: NextAuthConfig = {
             }
          },
 
+         
          async jwt({ token, trigger, session, account }) {
             //Google認証時にid_tokenをJWTに格納
+            //console.log("JWT Callback Trigger:", trigger);
             if (account && account.id_token) {
                 token.idToken = account.id_token;
             }
