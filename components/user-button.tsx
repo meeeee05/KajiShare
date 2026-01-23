@@ -27,7 +27,7 @@ export default function UserButton() {
               {session.user?.image && (
                 <AvatarImage src={session.user?.image} alt={session.user.name ?? ""} />
               )}
-              <AvatarFallback>{session.user?.email}</AvatarFallback>
+              <AvatarFallback><div className="w-10 h-10 rounded-full bg-muted/50 border-2 border-border animate-pulse" /></AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
