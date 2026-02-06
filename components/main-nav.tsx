@@ -12,13 +12,12 @@ import {
   navigationMenuTriggerStyle,
 } from "./ui/navigation-menu";
 import React from "react";
-import { Button } from "./ui/button";
 
 export function MainNav() {
   return (
-    <div className="flex gap-4 items-center">
-      <CustomLink href="/">
-        <Button>Home</Button>
+    <div className="flex items-center gap-6">
+      <CustomLink href="/" className="text-xl font-bold tracking-tight">
+        KajiShare
       </CustomLink>
       <NavigationMenu>
         <NavigationMenuList>
@@ -55,7 +54,7 @@ const ListItem = React.forwardRef<
           ref={ref}
           className={cn(
             "block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-            className
+            className,
           )}
           {...props}
         >
