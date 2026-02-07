@@ -22,25 +22,16 @@ export default function UserButton() {
     <div className="flex gap-0 items-center">
       <button
         type="button"
-        className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-yellow-400 mr-1"
+        className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-1"
         onClick={() => {
-          if (document.documentElement.classList.contains("dark")) {
-            document.documentElement.classList.remove("dark");
+          if (document.documentElement.classList.contains('dark')) {
+            document.documentElement.classList.remove('dark');
           } else {
-            document.documentElement.classList.add("dark");
+            document.documentElement.classList.add('dark');
           }
         }}
       >
-        <Sun
-          className="w-6 h-6 text-yellow-500"
-          aria-label="ダークモード切替"
-        />
-      </button>
-      <button
-        type="button"
-        className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-1"
-      >
-        <Bell className="w-6 h-6 text-slate-500" aria-label="通知" />
+        <Sun className="w-6 h-6 text-slate-500" aria-label="ダークモード切替" />
       </button>
       <button
         type="button"
