@@ -3,8 +3,8 @@ import UserButton from "./user-button";
 
 export default function Header() {
   return (
-    <header className="sticky flex justify-center border-b">
-      <div className="flex items-center justify-between w-full h-16 max-w-3xl px-4 mx-auto sm:px-6">
+    <header className="sticky border-b">
+      <div className="flex items-center justify-between w-full pl-4 pr-64 pt-6 pb-6 sm:pl-6 sm:pr-80">
         <MainNav />
         <UserButton />
       </div>
