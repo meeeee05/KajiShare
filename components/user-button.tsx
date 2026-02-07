@@ -1,5 +1,6 @@
-"use client"
+"use client";
 import { Button } from "./ui/button";
+import { Bell, Settings } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,16 +19,32 @@ export default function UserButton() {
   if (!session) return <SignIn />;
 
   return (
-    <div className="flex gap-2 items-center">
-      <span className="hidden text-sm sm:inline-flex"></span>
+    <div className="flex gap-0 items-center">
+      <button
+        type="button"
+        className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-2"
+      >
+        <Bell className="w-6 h-6 text-slate-500" aria-label="通知" />
+      </button>
+      <button
+        type="button"
+        className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-6"
+      >
+        <Settings className="w-6 h-6 text-slate-500" aria-label="設定" />
+      </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative w-10 h-10 rounded-full">
             <Avatar className="w-10 h-10">
               {session.user?.image && (
-                <AvatarImage src={session.user?.image} alt={session.user.name ?? ""} />
+                <AvatarImage
+                  src={session.user?.image}
+                  alt={session.user.name ?? ""}
+                />
               )}
-              <AvatarFallback><div className="w-10 h-10 rounded-full bg-muted/50 border-2 border-border animate-pulse" /></AvatarFallback>
+              <AvatarFallback>
+                <div className="w-10 h-10 rounded-full bg-muted/50 border-2 border-border animate-pulse" />
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
@@ -39,7 +56,7 @@ export default function UserButton() {
               </p>
               <p className="text-xs leading-none text-muted-foreground">
                 {session.user?.email}
-                </p>
+              </p>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuItem>

@@ -25,17 +25,22 @@ export function MainNav() {
           <NavigationMenuItem>
             <NavigationMenuLink
               href="/server-example"
-              className={navigationMenuTriggerStyle()}
+              className={
+                navigationMenuTriggerStyle() +
+                " text-base md:text-lg font-bold ml-4"
+              }
             >
-              Server Side
+              タスク一覧
             </NavigationMenuLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink
               href="/client-example"
-              className={navigationMenuTriggerStyle()}
+              className={
+                navigationMenuTriggerStyle() + " text-base md:text-lg font-bold"
+              }
             >
-              Client Side
+              実績
             </NavigationMenuLink>
           </NavigationMenuItem>
         </NavigationMenuList>
