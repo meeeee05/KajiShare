@@ -22,8 +22,8 @@ export default function UserButton() {
       <span className="hidden text-sm sm:inline-flex"></span>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative w-8 h-8 rounded-full">
-            <Avatar className="w-8 h-8">
+          <Button variant="ghost" className="relative w-10 h-10 rounded-full">
+            <Avatar className="w-10 h-10">
               {session.user?.image && (
                 <AvatarImage src={session.user?.image} alt={session.user.name ?? ""} />
               )}
