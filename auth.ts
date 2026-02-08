@@ -14,6 +14,9 @@ export const config: NextAuthConfig = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
   ],
+  pages: {
+    signIn: "/auth/signin",
+  },
   basePath: "/api/auth",
   callbacks: {
     authorized: ({ request, auth }) => {
