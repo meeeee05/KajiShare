@@ -15,7 +15,7 @@ import React from "react";
 
 export function MainNav() {
   return (
-    <div className="flex items-center gap-6">
+    <div className="flex items-center gap-6 flex-wrap">
       <CustomLink href="/" className="text-7xl font-extrabold tracking-tight">
         <span className="text-slate-900 dark:text-white">Kaji</span>
         <span className="text-blue-600">Share</span>
@@ -40,7 +40,19 @@ export function MainNav() {
                 navigationMenuTriggerStyle() + " text-base md:text-lg font-bold"
               }
             >
-              実績
+              いままでの実績
+            </NavigationMenuLink>
+          </NavigationMenuItem>
+          <NavigationMenuItem>
+            <NavigationMenuLink
+              href="#"
+              onClick={(event) => event.preventDefault()}
+              className={
+                navigationMenuTriggerStyle() +
+                " text-base md:text-lg font-bold cursor-default"
+              }
+            >
+              グループ切替え
             </NavigationMenuLink>
           </NavigationMenuItem>
         </NavigationMenuList>
