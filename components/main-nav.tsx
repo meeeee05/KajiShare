@@ -24,7 +24,7 @@ export function MainNav() {
         <NavigationMenuList>
           <NavigationMenuItem>
             <NavigationMenuLink
-              href="/server-example"
+              href="/tasks"
               className={
                 navigationMenuTriggerStyle() +
                 " text-base md:text-lg font-bold ml-4"
@@ -35,7 +35,7 @@ export function MainNav() {
           </NavigationMenuItem>
           <NavigationMenuItem>
             <NavigationMenuLink
-              href="/client-example"
+              href="/records"
               className={
                 navigationMenuTriggerStyle() + " text-base md:text-lg font-bold"
               }

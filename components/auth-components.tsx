@@ -1,34 +1,34 @@
 import React from "react";
 import { Button } from "./ui/button";
-import { sign } from "crypto";
-import { signIn } from "next-auth/react";
-import { signOut } from "next-auth/react";
+import { DropdownMenuItem } from "./ui/dropdown-menu";
+import { signIn, signOut } from "next-auth/react";
 
 export function SignIn({
   provider,
   ...props
 }: { provider?: string } & React.ComponentPropsWithRef<typeof Button>) {
   return (
-    <form 
-    action={async () => {
-      "useserver";
-      await signIn(provider);
+    <form
+      action={async () => {
+        "useserver";
+        await signIn(provider);
       }}
-      >
+    >
       <Button {...props}>サインイン</Button>
     </form>
   );
 }
 
-export function SignOut({
-  provider,
-  ...props
-}: { provider?: string } & React.ComponentPropsWithRef<typeof Button>) {
+export function SignOutMenuItem() {
   return (
-    <Button variant="ghost" className="w-full p-0" 
-    {...props} onClick={() => signOut()}
-      >
+    <DropdownMenuItem
+      className="justify-start text-xs text-red-600 transition-colors hover:bg-red-50 hover:text-red-600 focus:bg-red-100 focus:text-red-700"
+      onSelect={(event) => {
+        event.preventDefault();
+        signOut();
+      }}
+    >
       サインアウト
-    </Button>
+    </DropdownMenuItem>
   );
 }
