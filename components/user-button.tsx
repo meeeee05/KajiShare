@@ -23,10 +23,17 @@ export default function UserButton() {
         type="button"
         className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-1"
         onClick={() => {
-          if (document.documentElement.classList.contains("dark")) {
-            document.documentElement.classList.remove("dark");
-          } else {
-            document.documentElement.classList.add("dark");
+          try {
+            const el = document.documentElement;
+            if (el.classList.contains("dark")) {
+              el.classList.remove("dark");
+              localStorage.setItem("theme", "light");
+            } else {
+              el.classList.add("dark");
+              localStorage.setItem("theme", "dark");
+            }
+          } catch (e) {
+            // ignore (e.g. SSR or strict environments)
           }
         }}
       >

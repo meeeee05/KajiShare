@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/header";
 import { SessionProvider } from "next-auth/react";
 import React from "react";
+import Script from "next/script";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,8 +26,11 @@ export default async function RootLayout({
   //layout.tsxではグローバルな認証リダイレクトは行わない
   //必要なページだけで認証チェック・リダイレクトを行う
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
+        <Script id="theme-script" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.classList.add('dark');}else if(t==='light'){document.documentElement.classList.remove('dark');}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches){document.documentElement.classList.add('dark');}}catch(e){}})()`}
+        </Script>
         <SessionProvider>
           <div className="flex flex-col justify-between w-full h-full min-h-screen">
             <Header />
