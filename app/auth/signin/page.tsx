@@ -29,6 +29,12 @@ export default function SignInPage() {
         >
           Googleでサインイン
         </Button>
+        <button
+          type="button"
+          className="w-full text-center text-sm text-blue-600 hover:underline"
+        >
+          ゲストログイン
+        </button>
       </div>
     </div>
   );
