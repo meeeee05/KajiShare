@@ -24,10 +24,17 @@ export default function SignInPage() {
         </div>
         <Button
           size="lg"
-          className="w-full text-base"
+          className="w-full text-base flex items-center justify-center gap-2"
           onClick={() => signIn("google", { callbackUrl: "/" })}
         >
-          Googleでサインイン
+          <span>Googleでサインイン</span>
+          <Image
+            src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+            alt="Google ロゴ"
+            width={20}
+            height={20}
+            style={{ display: "inline-block" }}
+          />
         </Button>
         <button
           type="button"
