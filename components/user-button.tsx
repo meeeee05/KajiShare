@@ -46,7 +46,7 @@ export default function UserButton() {
               type="button"
               className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-6"
             >
-              <Settings className="w-6 h-6 text-slate-500" aria-label="設定" />
+              <Settings className="w-6 h-6 text-slate-500" aria-label="ダークモード切替" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-48" align="end" forceMount>
