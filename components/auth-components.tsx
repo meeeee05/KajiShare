@@ -25,7 +25,7 @@ export function SignOutMenuItem() {
       className="justify-start text-xs text-red-600 transition-colors hover:bg-red-50 hover:text-red-600 focus:bg-red-100 focus:text-red-700"
       onSelect={(event) => {
         event.preventDefault();
-        signOut();
+        signOut({ callbackUrl: "/auth/signin" });
       }}
     >
       サインアウト
