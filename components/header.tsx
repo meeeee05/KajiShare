@@ -1,12 +1,18 @@
+"use client";
+
 import { MainNav } from "./main-nav";
 import UserButton from "./user-button";
+import { usePathname } from "next/navigation";
 
 export default function Header() {
+  const pathname = usePathname();
+  const isAuthSignIn = pathname === "/auth/signin";
+
   return (
     <header className="sticky border-b">
       <div className="flex items-center justify-between w-full pl-4 pr-64 pt-6 pb-6 sm:pl-6 sm:pr-80">
-        <MainNav />
-        <UserButton />
+        <MainNav hideMenu={isAuthSignIn} />
+        {!isAuthSignIn && <UserButton />}
       </div>
     </header>
   );

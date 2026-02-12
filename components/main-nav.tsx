@@ -13,50 +13,53 @@ import {
 } from "./ui/navigation-menu";
 import React from "react";
 
-export function MainNav() {
+export function MainNav({ hideMenu = false }: { hideMenu?: boolean }) {
   return (
     <div className="flex items-center gap-6 flex-wrap">
       <CustomLink href="/" className="text-7xl font-extrabold tracking-tight">
         <span className="text-slate-900 dark:text-white">Kaji</span>
         <span className="text-blue-600">Share</span>
       </CustomLink>
-      <NavigationMenu>
-        <NavigationMenuList>
-          <NavigationMenuItem>
-            <NavigationMenuLink
-              href="/tasks"
-              className={
-                navigationMenuTriggerStyle() +
-                " text-base md:text-lg font-bold ml-4"
-              }
-            >
-              タスク一覧
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-          <NavigationMenuItem>
-            <NavigationMenuLink
-              href="/records"
-              className={
-                navigationMenuTriggerStyle() + " text-base md:text-lg font-bold"
-              }
-            >
-              いままでの実績
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-          <NavigationMenuItem>
-            <NavigationMenuLink
-              href="#"
-              onClick={(event) => event.preventDefault()}
-              className={
-                navigationMenuTriggerStyle() +
-                " text-base md:text-lg font-bold cursor-default"
-              }
-            >
-              グループ切替え
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-        </NavigationMenuList>
-      </NavigationMenu>
+      {!hideMenu && (
+        <NavigationMenu>
+          <NavigationMenuList>
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                href="/tasks"
+                className={
+                  navigationMenuTriggerStyle() +
+                  " text-base md:text-lg font-bold ml-4"
+                }
+              >
+                タスク一覧
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                href="/records"
+                className={
+                  navigationMenuTriggerStyle() +
+                  " text-base md:text-lg font-bold"
+                }
+              >
+                いままでの実績
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                href="#"
+                onClick={(event) => event.preventDefault()}
+                className={
+                  navigationMenuTriggerStyle() +
+                  " text-base md:text-lg font-bold cursor-default"
+                }
+              >
+                グループ切替え
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          </NavigationMenuList>
+        </NavigationMenu>
+      )}
     </div>
   );
 }
