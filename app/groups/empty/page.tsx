@@ -82,42 +82,50 @@ export default function EmptyGroupsPage() {
       <p className="mb-6 text-gray-600 max-w-md whitespace-nowrap text-left -ml-4">
         グループを登録すると、家事やタスクの進捗を共有できるようになります。
       </p>
-      {error && (
-        <p className="mb-2 text-sm text-red-600 max-w-md text-left">{error}</p>
-      )}
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center"
-      >
-        <input
-          type="text"
-          value={groupName}
-          onChange={(e) => setGroupName(e.target.value)}
-          placeholder="グループ名を入力"
-          className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-        <Button type="submit" variant="default" disabled={isSubmitting}>
-          {isSubmitting ? "登録中..." : "グループを登録する"}
-        </Button>
-      </form>
-      <div className="mt-8 w-full max-w-md text-left">
-        <p className="mb-3 text-sm text-gray-600">招待IDをお持ちの方はこちら</p>
-        {joinError && <p className="mb-2 text-sm text-red-600">{joinError}</p>}
-        <form
-          onSubmit={handleJoin}
-          className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center"
-        >
-          <input
-            type="text"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-            placeholder="招待IDを入力"
-            className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          />
-          <Button type="submit" variant="outline">
-            グループに参加する
-          </Button>
-        </form>
+      <div className="w-full max-w-md flex flex-col gap-8 items-center mx-auto">
+        <div className="w-full flex flex-col items-center">
+          {error && (
+            <p className="mb-2 text-sm text-red-600 text-left">{error}</p>
+          )}
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col sm:flex-row gap-0 items-center justify-center w-full"
+          >
+            <input
+              type="text"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder="グループ名を入力"
+              className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mx-auto"
+            />
+            <Button type="submit" variant="default" disabled={isSubmitting}>
+              {isSubmitting ? "登録中..." : "作成"}
+            </Button>
+          </form>
+        </div>
+        <div className="w-full flex flex-col items-center">
+          <p className="mb-3 text-sm text-gray-600">
+            招待IDをお持ちの方はこちら
+          </p>
+          {joinError && (
+            <p className="mb-2 text-sm text-red-600">{joinError}</p>
+          )}
+          <form
+            onSubmit={handleJoin}
+            className="flex flex-col sm:flex-row gap-0 items-center justify-center w-full"
+          >
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              placeholder="招待IDを入力"
+              className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mx-auto"
+            />
+            <Button type="submit" variant="outline">
+              参加
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
   );
