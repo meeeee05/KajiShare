@@ -67,11 +67,11 @@ export default function EmptyGroupsPage() {
 
   return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center px-4 text-center">
-      <div className="flex justify-center items-center gap-2 mb-6">
+      <div className="flex justify-center items-center gap-0.5 mb-6">
         <span className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">
           Kaji
         </span>
-        <span className="text-3xl font-extrabold tracking-tight text-blue-600 leading-none ml-0.5">
+        <span className="text-3xl font-extrabold tracking-tight text-blue-600 leading-none ml-0">
           Share
         </span>
         <span className="text-xl font-bold ml-2">へようこそ！</span>

@@ -13,13 +13,34 @@ import {
 } from "./ui/navigation-menu";
 import React from "react";
 
-export function MainNav({ hideMenu = false }: { hideMenu?: boolean }) {
+export function MainNav({
+  hideMenu = false,
+  disableLogoLink = false,
+}: {
+  hideMenu?: boolean;
+  disableLogoLink?: boolean;
+}) {
+  const logoContent = (
+    <>
+      <span className="text-slate-900 dark:text-white">Kaji</span>
+      <span className="text-blue-600">Share</span>
+    </>
+  );
+
   return (
     <div className="flex items-center gap-6 flex-wrap">
-      <CustomLink href="/" className="text-7xl font-extrabold tracking-tight">
-        <span className="text-slate-900 dark:text-white">Kaji</span>
-        <span className="text-blue-600">Share</span>
-      </CustomLink>
+      {disableLogoLink ? (
+        <div
+          className="text-7xl font-extrabold tracking-tight"
+          aria-label="KajiShare"
+        >
+          {logoContent}
+        </div>
+      ) : (
+        <CustomLink href="/" className="text-7xl font-extrabold tracking-tight">
+          {logoContent}
+        </CustomLink>
+      )}
       {!hideMenu && (
         <NavigationMenu>
           <NavigationMenuList>
