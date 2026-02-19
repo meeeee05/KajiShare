@@ -15,8 +15,7 @@ export default function HelpPage() {
 
       <h2>お問い合わせ</h2>
       <p>
-        support@kajishare.example
-        までご連絡ください。
+        ご質問やご意見がある場合は、以下のフォームからご連絡ください。
       </p>
     </div>
   );
