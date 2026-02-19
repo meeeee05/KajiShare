@@ -42,8 +42,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "ID token is missing" }, { status: 401 });
   }
 
+  const trimmedApiUrl = apiUrl.replace(/\/+$/, "");
+  const endpoint = trimmedApiUrl.endsWith("/api/v1")
+    ? `${trimmedApiUrl}/groups`
+    : `${trimmedApiUrl}/api/v1/groups`;
+
   try {
-    const res = await fetch(`${apiUrl}/api/v1/groups`, {
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -43,8 +43,8 @@ export default function EmptyGroupsPage() {
         return;
       }
 
-      // 正常に登録できたらグループ設定ページへ遷移
-      router.push("/groups");
+      // 正常に登録できたらトップページへ遷移
+      router.push("/");
     } catch (e) {
       setError("グループの登録中にエラーが発生しました。");
     } finally {
