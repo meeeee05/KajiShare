@@ -24,7 +24,7 @@ export default async function EmptyGroupsPage() {
       if (res.ok) {
         const memberships = await res.json();
         if (Array.isArray(memberships) && memberships.length > 0) {
-          redirect("/groups");
+          redirect("/");
         }
       }
     } catch (error) {
