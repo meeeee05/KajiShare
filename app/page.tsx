@@ -14,7 +14,7 @@ export default async function Home() {
 
   if (idToken && apiUrl) {
     try {
-      const membershipsRes = await fetch(`${apiUrl}/api/v1/memberships`, {
+      const membershipsRes = await fetch(`${apiUrl}/memberships`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${idToken}`,

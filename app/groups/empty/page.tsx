@@ -14,7 +14,7 @@ export default async function EmptyGroupsPage() {
 
   if (apiUrl && idToken) {
     try {
-      const res = await fetch(`${apiUrl}/api/v1/memberships`, {
+      const res = await fetch(`${apiUrl}/memberships`, {
         headers: {
           Authorization: `Bearer ${idToken}`,
         },

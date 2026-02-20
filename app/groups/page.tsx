@@ -24,7 +24,7 @@ export default async function GroupsPage() {
   let memberships: any = null;
 
   try {
-    const res = await fetch(`${apiUrl}/api/v1/memberships`, {
+    const res = await fetch(`${apiUrl}/memberships`, {
       headers: {
         Authorization: `Bearer ${(session.user as any).idToken}`,
       },

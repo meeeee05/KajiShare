@@ -43,9 +43,9 @@ export async function POST(req: Request) {
   }
 
   const trimmedApiUrl = apiUrl.replace(/\/+$/, "");
-  const endpoint = trimmedApiUrl.endsWith("/api/v1")
+  const endpoint = trimmedApiUrl.endsWith("/")
     ? `${trimmedApiUrl}/groups`
-    : `${trimmedApiUrl}/api/v1/groups`;
+    : `${trimmedApiUrl}/groups`;
 
   try {
     const res = await fetch(endpoint, {
