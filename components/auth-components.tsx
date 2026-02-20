@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { Button } from "./ui/button";
 import { DropdownMenuItem } from "./ui/dropdown-menu";
@@ -7,15 +9,17 @@ export function SignIn({
   provider,
   ...props
 }: { provider?: string } & React.ComponentPropsWithRef<typeof Button>) {
+  const providerId = provider ?? "google";
   return (
-    <form
-      action={async () => {
-        "useserver";
-        await signIn(provider);
+    <Button
+      type="button"
+      {...props}
+      onClick={() => {
+        signIn(providerId, { callbackUrl: "/groups" });
       }}
     >
-      <Button {...props}>サインイン</Button>
-    </form>
+      サインイン
+    </Button>
   );
 }
 

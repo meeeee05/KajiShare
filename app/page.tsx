@@ -1,5 +1,6 @@
 import CustomLink from "@/components/custom-link";
 import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 
 export default async function Home() {
   //セッション取得
@@ -7,13 +8,39 @@ export default async function Home() {
 
   const apiUrl = process.env.API_URL;
   let apiResponseBody: unknown = null;
+  let hasGroups = false;
 
-  if (session?.user?.idToken && apiUrl) {
+  const idToken = session?.user?.idToken;
+
+  if (idToken && apiUrl) {
+    try {
+      const membershipsRes = await fetch(`${apiUrl}/api/v1/memberships`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+        cache: "no-store",
+      });
+
+      if (membershipsRes.ok) {
+        const memberships = await membershipsRes.json();
+        hasGroups = Array.isArray(memberships) && memberships.length > 0;
+      }
+    } catch (error) {
+      // memberships 取得に失敗した場合は hasGroups を false のままにする
+    }
+  }
+
+  if (hasGroups) {
+    redirect("/groups");
+  }
+
+  if (idToken && apiUrl) {
     try {
       const response = await fetch(`${apiUrl}/users`, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${session.user.idToken}`,
+          Authorization: `Bearer ${idToken}`,
         },
       });
       const rawBody = await response.text();

@@ -25,7 +25,7 @@ export default function SignInPage() {
         <Button
           size="lg"
           className="w-full text-base flex items-center justify-center gap-2"
-          onClick={() => signIn("google", { callbackUrl: "/" })}
+          onClick={() => signIn("google", { callbackUrl: "/groups" })}
         >
           <span>Googleでサインイン</span>
           <Image
