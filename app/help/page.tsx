@@ -1,3 +1,5 @@
+import HelpContactForm from "@/components/help-contact-form";
+
 export default function HelpPage() {
   return (
     <div className="prose max-w-none p-6">
@@ -14,9 +16,8 @@ export default function HelpPage() {
       </p>
 
       <h2>お問い合わせ</h2>
-      <p>
-        ご質問やご意見がある場合は、以下のフォームからご連絡ください。
-      </p>
+      <p>ご質問やご意見がある場合は、以下のフォームからご連絡ください。</p>
+      <HelpContactForm />
     </div>
   );
 }

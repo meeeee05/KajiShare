@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 export default function GroupsEmptyClient() {
   const [groupName, setGroupName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -52,7 +53,7 @@ export default function GroupsEmptyClient() {
     }
   };
 
-  const handleJoin = (event: FormEvent<HTMLFormElement>) => {
+  const handleJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmed = inviteCode.trim();
@@ -61,8 +62,34 @@ export default function GroupsEmptyClient() {
       return;
     }
 
+    setIsJoining(true);
     setJoinError(null);
-    router.push(`/groups?invite=${encodeURIComponent(trimmed)}`);
+
+    try {
+      const res = await fetch("/api/groups/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inviteCode: trimmed }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setJoinError(
+          (data as any)?.error ??
+            "グループ参加に失敗しました。招待IDをご確認ください。",
+        );
+        return;
+      }
+
+      router.push("/");
+    } catch (e) {
+      setJoinError("グループ参加中にエラーが発生しました。");
+    } finally {
+      setIsJoining(false);
+    }
   };
 
   return (
@@ -121,8 +148,8 @@ export default function GroupsEmptyClient() {
               placeholder="招待IDを入力"
               className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mx-auto"
             />
-            <Button type="submit" variant="outline">
-              参加
+            <Button type="submit" variant="outline" disabled={isJoining}>
+              {isJoining ? "参加中..." : "参加"}
             </Button>
           </form>
         </div>
