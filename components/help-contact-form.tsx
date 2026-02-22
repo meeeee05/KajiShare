@@ -64,7 +64,7 @@ export default function HelpContactForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="not-prose mt-4 max-w-xl space-y-4">
+    <form onSubmit={handleSubmit} className="mt-5 space-y-4">
       <div className="space-y-1">
         <label htmlFor="contact-name" className="text-sm font-medium">
           名前
@@ -72,9 +72,10 @@ export default function HelpContactForm() {
         <input
           id="contact-name"
           type="text"
+          required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="山田 太郎"
         />
       </div>
@@ -86,9 +87,10 @@ export default function HelpContactForm() {
         <input
           id="contact-email"
           type="email"
+          required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="example@example.com"
         />
       </div>
@@ -99,10 +101,11 @@ export default function HelpContactForm() {
         </label>
         <textarea
           id="contact-message"
+          required
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={6}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="お問い合わせ内容を入力してください"
         />
       </div>
@@ -110,7 +113,7 @@ export default function HelpContactForm() {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {success ? <p className="text-sm text-green-600">{success}</p> : null}
 
-      <Button type="submit" disabled={isSubmitting}>
+      <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
         {isSubmitting ? "送信中..." : "送信"}
       </Button>
     </form>
