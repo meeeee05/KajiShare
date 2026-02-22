@@ -15,7 +15,7 @@ export function SignIn({
       type="button"
       {...props}
       onClick={() => {
-        signIn(providerId, { callbackUrl: "/groups" });
+        signIn(providerId, { callbackUrl: "/" });
       }}
     >
       サインイン
