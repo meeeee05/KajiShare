@@ -11,11 +11,11 @@ export default function HelpPage() {
           Share
         </span>
       </div>
-      <p>
-        KajiShareは、家事や毎日のタスクをみんなでゆるく分担・共有できるサービスです。誰が何をやるか、今どこまで進んでいるかがパッとわかるので、「気づいたら一人に負担が偏っていた…」みたいな状態を防ぎやすくなります。家族や同居人、パートナーとのやり取りをもっとスムーズにして、毎日の家事を少しラクにするためのツールです。
+      <p className="mt-10 text-center">
+        KajiShareは、家事や毎日のタスクをみんなで分担・共有するためのアプリです。
       </p>
 
-      <h2>お問い合わせ</h2>
+      <h2 className="mt-40 font-extrabold">お問い合わせ</h2>
       <p>ご質問やご意見がある場合は、以下のフォームからご連絡ください。</p>
       <div className="not-prose max-w-xl">
         <HelpContactForm />

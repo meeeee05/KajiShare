@@ -113,7 +113,11 @@ export default function HelpContactForm() {
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {success ? <p className="text-sm text-green-600">{success}</p> : null}
 
-      <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+      <Button
+        type="submit"
+        disabled={isSubmitting}
+        className="w-full sm:w-auto"
+      >
         {isSubmitting ? "送信中..." : "送信"}
       </Button>
     </form>
