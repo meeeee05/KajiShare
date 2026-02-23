@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import AccountDeleteButton from "@/components/account-delete-button";
+import AccountEditableFields from "@/components/account-editable-fields";
 
 export default async function AccountPage() {
   const session = await auth();
@@ -38,31 +39,15 @@ export default async function AccountPage() {
 
   return (
     <div className="prose max-w-none p-6">
-      <h1>アカウント設定</h1>
-      <p>サインイン中のアカウント情報です。</p>
+      <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
+        アカウント設定
+      </h1>
 
-      <div className="not-prose mt-6 rounded-lg border bg-white p-5 shadow-sm dark:bg-slate-900">
-        <div className="grid gap-3 text-sm">
-          <div className="grid grid-cols-[120px_1fr] gap-2">
-            <span className="font-semibold text-slate-600 dark:text-slate-300">
-              名前
-            </span>
-            <span>{user?.name ?? "未設定"}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2">
-            <span className="font-semibold text-slate-600 dark:text-slate-300">
-              メール
-            </span>
-            <span>{user?.email ?? "未設定"}</span>
-          </div>
-          <div className="grid grid-cols-[120px_1fr] gap-2">
-            <span className="font-semibold text-slate-600 dark:text-slate-300">
-              account_type
-            </span>
-            <span>{accountType ?? "未設定"}</span>
-          </div>
-        </div>
-      </div>
+      <AccountEditableFields
+        initialName={user?.name}
+        initialEmail={user?.email}
+        initialAccountType={accountType}
+      />
 
       <AccountDeleteButton />
     </div>
