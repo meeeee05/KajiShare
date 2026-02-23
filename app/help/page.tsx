@@ -14,6 +14,12 @@ export default function HelpPage() {
       <p className="mt-10 text-center">
         KajiShareは、家事や毎日のタスクをみんなで分担・共有するためのアプリです。
       </p>
+      <p className="mt-4 text-sm text-center">
+        グループを作成することで、家族やルームメイトとタスクの進捗を共有できます。
+      </p>
+      <p className="mt-2 text-sm text-center">
+        タスクの完了状況をリアルタイムで確認できるため、効率的に家事を分担することが可能です。
+      </p>
 
       <h2 className="mt-40 font-extrabold">お問い合わせ</h2>
       <p>ご質問やご意見がある場合は、以下のフォームからご連絡ください。</p>
