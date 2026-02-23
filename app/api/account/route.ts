@@ -14,9 +14,9 @@ const resolveUserId = async (
   }
 
   const profileCandidates = [
-    `${trimmedApiUrl}/api/v1/users/me`,
+    `${trimmedApiUrl}/users/me`,
     `${trimmedApiUrl}/users`,
-    `${trimmedApiUrl}/api/v1/users`,
+    `${trimmedApiUrl}/users`,
   ];
 
   for (const endpoint of profileCandidates) {
@@ -52,9 +52,9 @@ const resolveUserId = async (
 
 const buildUsersV1Endpoint = (apiUrl: string, userId: string | number) => {
   const trimmedApiUrl = apiUrl.replace(/\/+$/, "");
-  const base = trimmedApiUrl.endsWith("/api/v1")
+  const base = trimmedApiUrl.endsWith("/")
     ? trimmedApiUrl
-    : `${trimmedApiUrl}/api/v1`;
+    : `${trimmedApiUrl}/`;
 
   return `${base}/users/${encodeURIComponent(String(userId))}`;
 };
