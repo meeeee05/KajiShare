@@ -154,6 +154,9 @@ export default function GroupsEmptyClient() {
           </form>
         </div>
       </div>
+      <p className="mt-10 text-sm text-gray-600 text-center">
+        既にグループを登録済みの方は再度サインインして下さい
+      </p>
     </div>
   );
 }
