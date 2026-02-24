@@ -23,17 +23,17 @@ export default function UserButton() {
         type="button"
         className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-1"
         onClick={() => {
-          try {
-            const el = document.documentElement;
-            if (el.classList.contains("dark")) {
-              el.classList.remove("dark");
-              localStorage.setItem("theme", "light");
-            } else {
-              el.classList.add("dark");
-              localStorage.setItem("theme", "dark");
-            }
-          } catch (e) {
-            // ignore (e.g. SSR or strict environments)
+          if (typeof window === "undefined") {
+            return;
+          }
+
+          const el = document.documentElement;
+          if (el.classList.contains("dark")) {
+            el.classList.remove("dark");
+            localStorage.setItem("theme", "light");
+          } else {
+            el.classList.add("dark");
+            localStorage.setItem("theme", "dark");
           }
         }}
       >
@@ -46,7 +46,10 @@ export default function UserButton() {
               type="button"
               className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-6"
             >
-              <Settings className="w-6 h-6 text-slate-500" aria-label="ダークモード切替" />
+              <Settings
+                className="w-6 h-6 text-slate-500"
+                aria-label="ダークモード切替"
+              />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-48" align="end" forceMount>

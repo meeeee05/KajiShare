@@ -23,19 +23,15 @@ export default async function GroupsPage() {
 
   let memberships: any = null;
 
-  try {
-    const res = await fetch(`${apiUrl}/memberships`, {
-      headers: {
-        Authorization: `Bearer ${(session.user as any).idToken}`,
-      },
-      cache: "no-store",
-    });
+  const res = await fetch(`${apiUrl}/memberships`, {
+    headers: {
+      Authorization: `Bearer ${(session.user as any).idToken}`,
+    },
+    cache: "no-store",
+  }).catch(() => null);
 
-    if (res.ok) {
-      memberships = await res.json();
-    }
-  } catch (e) {
-    // 通信エラー時は memberships をそのまま null として扱う
+  if (res?.ok) {
+    memberships = await res.json();
   }
 
   // memberships が null または空配列などの場合は /groups/empty へ

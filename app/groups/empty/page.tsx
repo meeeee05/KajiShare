@@ -13,22 +13,18 @@ export default async function EmptyGroupsPage() {
   const idToken = (session.user as any)?.idToken as string | undefined;
 
   if (apiUrl && idToken) {
-    try {
-      const res = await fetch(`${apiUrl}/memberships`, {
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-        cache: "no-store",
-      });
+    const res = await fetch(`${apiUrl}/memberships`, {
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      cache: "no-store",
+    }).catch(() => null);
 
-      if (res.ok) {
-        const memberships = await res.json();
-        if (Array.isArray(memberships) && memberships.length > 0) {
-          redirect("/");
-        }
+    if (res?.ok) {
+      const memberships = await res.json();
+      if (Array.isArray(memberships) && memberships.length > 0) {
+        redirect("/");
       }
-    } catch (error) {
-      // 通信エラー時はフォームを表示
     }
   }
 
