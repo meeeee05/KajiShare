@@ -13,21 +13,17 @@ export default async function Home() {
   const idToken = session?.user?.idToken;
 
   if (idToken && apiUrl) {
-    try {
-      const membershipsRes = await fetch(`${apiUrl}/memberships`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-        cache: "no-store",
-      });
+    const membershipsRes = await fetch(`${apiUrl}/memberships`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      cache: "no-store",
+    }).catch(() => null);
 
-      if (membershipsRes.ok) {
-        const memberships = await membershipsRes.json();
-        hasGroups = Array.isArray(memberships) && memberships.length > 0;
-      }
-    } catch (error) {
-      // memberships 取得に失敗した場合は hasGroups を false のままにする
+    if (membershipsRes?.ok) {
+      const memberships = await membershipsRes.json();
+      hasGroups = Array.isArray(memberships) && memberships.length > 0;
     }
   }
 

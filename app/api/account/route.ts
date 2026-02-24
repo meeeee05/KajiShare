@@ -20,30 +20,26 @@ const resolveUserId = async (
   ];
 
   for (const endpoint of profileCandidates) {
-    try {
-      const meRes = await fetch(endpoint, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-        cache: "no-store",
-      });
+    const meRes = await fetch(endpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      cache: "no-store",
+    }).catch(() => null);
 
-      if (!meRes.ok) {
-        continue;
-      }
+    if (!meRes?.ok) {
+      continue;
+    }
 
-      const meData = await meRes.json().catch(() => null);
-      userId =
-        (meData as any)?.id ??
-        (meData as any)?.user?.id ??
-        (meData as any)?.data?.id;
+    const meData = await meRes.json().catch(() => null);
+    userId =
+      (meData as any)?.id ??
+      (meData as any)?.user?.id ??
+      (meData as any)?.data?.id;
 
-      if (userId) {
-        return userId;
-      }
-    } catch {
-      // 次の候補を試す
+    if (userId) {
+      return userId;
     }
   }
 
