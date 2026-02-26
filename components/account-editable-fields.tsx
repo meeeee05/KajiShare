@@ -86,7 +86,7 @@ export default function AccountEditableFields({
   const rows: Array<{ key: EditableKey; label: string }> = [
     { key: "name", label: "名前" },
     { key: "email", label: "メール" },
-    { key: "account_type", label: "権限" },
+    // 権限（account_type）は表示しない
   ];
 
   return (
