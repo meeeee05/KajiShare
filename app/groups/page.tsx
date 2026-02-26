@@ -42,6 +42,41 @@ const pickFirstString = (
   return undefined;
 };
 
+const pickLikelyGroupName = (obj: AnyRecord | null): string | undefined => {
+  if (!obj) {
+    return undefined;
+  }
+
+  const explicit = pickFirstString(obj, [
+    "name",
+    "group_name",
+    "groupName",
+    "title",
+    "group_title",
+    "groupTitle",
+  ]);
+
+  if (explicit) {
+    return explicit;
+  }
+
+  for (const [key, value] of Object.entries(obj)) {
+    const lower = key.toLowerCase();
+    if (
+      typeof value === "string" &&
+      value.trim() &&
+      lower.includes("name") &&
+      !lower.includes("admin") &&
+      !lower.includes("owner") &&
+      !lower.includes("user")
+    ) {
+      return value;
+    }
+  }
+
+  return undefined;
+};
+
 const pickAdminName = (
   group: AnyRecord | null,
   membership: AnyRecord | null,
@@ -123,6 +158,66 @@ const pickAdminName = (
   return undefined;
 };
 
+const buildGroupItem = (
+  group: AnyRecord | null,
+  base: AnyRecord | null,
+  fallbackName: string,
+): GroupListItem => {
+  const id =
+    pickFirstString(group, ["id", "group_id", "groupId"]) ??
+    pickFirstString(base, ["group_id", "groupId", "id", "gid"]);
+
+  const name =
+    pickLikelyGroupName(group) ?? pickLikelyGroupName(base) ?? fallbackName;
+
+  const ashareKey =
+    pickFirstString(group, [
+      "ashare_key",
+      "a_share_key",
+      "share_key",
+      "shareKey",
+    ]) ??
+    pickFirstString(base, [
+      "ashare_key",
+      "a_share_key",
+      "share_key",
+      "shareKey",
+    ]);
+
+  const ssignMode =
+    pickFirstString(group, [
+      "ssign_mode",
+      "sign_mode",
+      "assign_mode",
+      "assignment_mode",
+      "signMode",
+      "assignMode",
+    ]) ??
+    pickFirstString(base, [
+      "ssign_mode",
+      "sign_mode",
+      "assign_mode",
+      "assignment_mode",
+      "signMode",
+      "assignMode",
+    ]);
+
+  const balanceType =
+    pickFirstString(group, ["balance_type", "balanceType"]) ??
+    pickFirstString(base, ["balance_type", "balanceType"]);
+
+  const adminName = pickAdminName(group, base);
+
+  return {
+    id,
+    name,
+    ashareKey,
+    ssignMode,
+    balanceType,
+    adminName,
+  };
+};
+
 const normalizeMemberships = (memberships: unknown): GroupListItem[] => {
   if (!Array.isArray(memberships)) {
     return [];
@@ -130,67 +225,32 @@ const normalizeMemberships = (memberships: unknown): GroupListItem[] => {
 
   return memberships.map((item, index) => {
     const membership = asRecord(item);
-    const group = asRecord(membership?.group);
-
-    const id =
-      pickFirstString(group, ["id", "group_id", "groupId"]) ??
-      pickFirstString(membership, ["group_id", "groupId", "id"]);
-
-    const name =
-      pickFirstString(group, ["name", "group_name", "title"]) ??
-      pickFirstString(membership, ["group_name", "name", "title"]) ??
-      `グループ ${index + 1}`;
-
-    const ashareKey =
-      pickFirstString(group, [
-        "ashare_key",
-        "a_share_key",
-        "share_key",
-        "shareKey",
-      ]) ??
-      pickFirstString(membership, [
-        "ashare_key",
-        "a_share_key",
-        "share_key",
-        "shareKey",
-      ]);
-
-    const ssignMode =
-      pickFirstString(group, [
-        "ssign_mode",
-        "sign_mode",
-        "assign_mode",
-        "assignment_mode",
-        "signMode",
-        "assignMode",
-      ]) ??
-      pickFirstString(membership, [
-        "ssign_mode",
-        "sign_mode",
-        "assign_mode",
-        "assignment_mode",
-        "signMode",
-        "assignMode",
-      ]);
-
-    const balanceType =
-      pickFirstString(group, ["balance_type", "balanceType"]) ??
-      pickFirstString(membership, ["balance_type", "balanceType"]);
-
-    const adminName = pickAdminName(group, membership);
+    const group = asRecord(membership?.group) ?? membership;
+    const normalized = buildGroupItem(
+      group,
+      membership,
+      `グループ ${index + 1}`,
+    );
 
     const role = pickFirstString(membership, ["role", "member_role", "type"]);
 
     return {
-      id,
-      name,
-      ashareKey,
-      ssignMode,
-      balanceType,
-      adminName,
+      ...normalized,
       role,
     };
   });
+};
+
+const normalizeGroups = (groupsPayload: unknown): GroupListItem[] => {
+  const groups = extractMembershipsArray(groupsPayload);
+
+  return groups
+    .map((item, index) => {
+      const root = asRecord(item);
+      const group = asRecord(root?.group) ?? root;
+      return buildGroupItem(group, root, `グループ ${index + 1}`);
+    })
+    .filter((group) => Boolean(group.name?.trim()));
 };
 
 const extractMembershipsArray = (payload: unknown): unknown[] => {
@@ -206,11 +266,11 @@ const extractMembershipsArray = (payload: unknown): unknown[] => {
   const candidates: unknown[] = [
     root.memberships,
     root.groups,
+    asRecord(root.data)?.groups,
+    asRecord(root.data)?.memberships,
     root.data,
     root.items,
     root.results,
-    asRecord(root.data)?.memberships,
-    asRecord(root.data)?.groups,
     asRecord(root.data)?.items,
   ];
 
@@ -237,17 +297,23 @@ export default async function GroupsPage() {
   if (!apiUrl) {
     return (
       <div className="prose max-w-none p-6">
-        <h1>グループ設定</h1>
-        <p>所属グループの確認・切り替え・管理を行うページです。</p>
+        <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
+          グループ設定
+        </h1>
+        <p className="mt-6">
+          所属グループの確認・切り替え・管理を行うページです。
+        </p>
       </div>
     );
   }
 
   if (!idToken) {
     return (
-      <div className="p-6">
-        <h1 className="text-2xl font-bold">所属グループ一覧</h1>
-        <p className="mt-2 text-sm text-red-600">
+      <div className="prose max-w-none p-6">
+        <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
+          グループ設定
+        </h1>
+        <p className="mt-6 text-sm text-red-600">
           セッション情報の取得に失敗しました。再サインインしてください。
         </p>
       </div>
@@ -268,50 +334,122 @@ export default async function GroupsPage() {
     memberships = extractMembershipsArray(payload);
   }
 
-  // バックエンドによっては /memberships ではなく /groups が一覧APIの場合があるためフォールバック
-  if (memberships.length === 0) {
-    const groupsRes = await fetch(`${apiUrl}/groups`, {
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
-      cache: "no-store",
-    }).catch(() => null);
+  const groupsRes = await fetch(`${apiUrl}/groups`, {
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+    cache: "no-store",
+  }).catch(() => null);
 
-    if (groupsRes?.ok) {
-      const payload = await groupsRes.json().catch(() => null);
-      memberships = extractMembershipsArray(payload);
+  const groupsPayload = groupsRes?.ok
+    ? await groupsRes.json().catch(() => null)
+    : null;
+
+  const groupsFromGroupsApi = normalizeGroups(groupsPayload);
+  const groupsFromMemberships = normalizeMemberships(memberships);
+
+  const roleByKey = new Map<string, string>();
+  for (const membershipGroup of groupsFromMemberships) {
+    if (membershipGroup.id && membershipGroup.role) {
+      roleByKey.set(`id:${membershipGroup.id}`, membershipGroup.role);
+    }
+    if (membershipGroup.ashareKey && membershipGroup.role) {
+      roleByKey.set(`share:${membershipGroup.ashareKey}`, membershipGroup.role);
     }
   }
 
-  const groupList = normalizeMemberships(memberships);
+  let groupList =
+    groupsFromGroupsApi.length > 0
+      ? groupsFromGroupsApi.map((group) => {
+          const role =
+            (group.id ? roleByKey.get(`id:${group.id}`) : undefined) ??
+            (group.ashareKey
+              ? roleByKey.get(`share:${group.ashareKey}`)
+              : undefined);
+
+          return {
+            ...group,
+            role: role ?? group.role,
+          };
+        })
+      : groupsFromMemberships;
 
   if (groupList.length === 0) {
     redirect("/groups/empty");
   }
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">所属グループ一覧</h1>
-      <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+    <div className="prose max-w-none p-6">
+      <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
+        グループ設定
+      </h1>
+
+      <p className="mt-6 text-sm text-slate-600 dark:text-slate-300">
         あなたが参加しているグループは {groupList.length} 件です。
       </p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="not-prose mt-8 space-y-6">
         {groupList.map((group, index) => (
-          <div
+          <section
             key={group.id ?? `${group.name}-${index}`}
-            className="rounded-lg border bg-white p-4 shadow-sm dark:bg-slate-900"
+            className="rounded-lg border bg-card p-5"
           >
-            <p className="text-base font-semibold">{group.name}</p>
-            <div className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-300">
-              <p>グループID: {group.id ?? "-"}</p>
-              <p>ashare_key: {group.ashareKey ?? "-"}</p>
-              <p>ssign_mode: {group.ssignMode ?? "-"}</p>
-              <p>balance_type: {group.balanceType ?? "-"}</p>
-              <p>Admin: {group.adminName ?? "-"}</p>
-              <p>権限: {group.role ?? "-"}</p>
+            <h2 className="text-lg font-bold">{group.name}</h2>
+
+            <div className="mt-4 space-y-3">
+              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  グループID
+                </span>
+                <span className="font-medium break-all">{group.id ?? "-"}</span>
+              </div>
+
+              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  ashare_key
+                </span>
+                <span className="font-medium break-all">
+                  {group.ashareKey ?? "-"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  ssign_mode
+                </span>
+                <span className="font-medium break-all">
+                  {group.ssignMode ?? "-"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  balance_type
+                </span>
+                <span className="font-medium break-all">
+                  {group.balanceType ?? "-"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  Admin
+                </span>
+                <span className="font-medium break-all">
+                  {group.adminName ?? "-"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <span className="font-semibold text-slate-600 dark:text-slate-300">
+                  あなたの権限
+                </span>
+                <span className="font-medium break-all">
+                  {group.role ?? "-"}
+                </span>
+              </div>
             </div>
-          </div>
+          </section>
         ))}
       </div>
     </div>
