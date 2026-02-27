@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import Link from "next/link";
+import GroupLeaveLink from "@/components/group-leave-link";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -72,6 +74,63 @@ const pickLikelyGroupName = (obj: AnyRecord | null): string | undefined => {
     ) {
       return value;
     }
+  }
+
+  const visited = new Set<unknown>();
+
+  const walk = (value: unknown, depth: number): string | undefined => {
+    if (depth > 5 || value == null) {
+      return undefined;
+    }
+
+    if (typeof value !== "object") {
+      return undefined;
+    }
+
+    if (visited.has(value)) {
+      return undefined;
+    }
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = walk(item, depth + 1);
+        if (nested) {
+          return nested;
+        }
+      }
+      return undefined;
+    }
+
+    const record = value as AnyRecord;
+
+    for (const [key, v] of Object.entries(record)) {
+      const lower = key.toLowerCase();
+      if (
+        typeof v === "string" &&
+        v.trim() &&
+        lower.includes("name") &&
+        !lower.includes("admin") &&
+        !lower.includes("owner") &&
+        !lower.includes("user")
+      ) {
+        return v;
+      }
+    }
+
+    for (const v of Object.values(record)) {
+      const nested = walk(v, depth + 1);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return undefined;
+  };
+
+  const nestedName = walk(obj, 0);
+  if (nestedName) {
+    return nestedName;
   }
 
   return undefined;
@@ -163,21 +222,27 @@ const buildGroupItem = (
   base: AnyRecord | null,
   fallbackName: string,
 ): GroupListItem => {
+  const sourceGroup =
+    asRecord(group?.attributes) ?? asRecord(group?.data) ?? group;
+  const sourceBase = asRecord(base?.attributes) ?? asRecord(base?.data) ?? base;
+
   const id =
-    pickFirstString(group, ["id", "group_id", "groupId"]) ??
-    pickFirstString(base, ["group_id", "groupId", "id", "gid"]);
+    pickFirstString(sourceGroup, ["id", "group_id", "groupId"]) ??
+    pickFirstString(sourceBase, ["group_id", "groupId", "id", "gid"]);
 
   const name =
-    pickLikelyGroupName(group) ?? pickLikelyGroupName(base) ?? fallbackName;
+    pickLikelyGroupName(sourceGroup) ??
+    pickLikelyGroupName(sourceBase) ??
+    fallbackName;
 
   const ashareKey =
-    pickFirstString(group, [
+    pickFirstString(sourceGroup, [
       "ashare_key",
       "a_share_key",
       "share_key",
       "shareKey",
     ]) ??
-    pickFirstString(base, [
+    pickFirstString(sourceBase, [
       "ashare_key",
       "a_share_key",
       "share_key",
@@ -185,7 +250,7 @@ const buildGroupItem = (
     ]);
 
   const ssignMode =
-    pickFirstString(group, [
+    pickFirstString(sourceGroup, [
       "ssign_mode",
       "sign_mode",
       "assign_mode",
@@ -193,7 +258,7 @@ const buildGroupItem = (
       "signMode",
       "assignMode",
     ]) ??
-    pickFirstString(base, [
+    pickFirstString(sourceBase, [
       "ssign_mode",
       "sign_mode",
       "assign_mode",
@@ -203,10 +268,10 @@ const buildGroupItem = (
     ]);
 
   const balanceType =
-    pickFirstString(group, ["balance_type", "balanceType"]) ??
-    pickFirstString(base, ["balance_type", "balanceType"]);
+    pickFirstString(sourceGroup, ["balance_type", "balanceType"]) ??
+    pickFirstString(sourceBase, ["balance_type", "balanceType"]);
 
-  const adminName = pickAdminName(group, base);
+  const adminName = pickAdminName(sourceGroup, sourceBase);
 
   return {
     id,
@@ -253,6 +318,28 @@ const normalizeGroups = (groupsPayload: unknown): GroupListItem[] => {
     .filter((group) => Boolean(group.name?.trim()));
 };
 
+const toArray = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  const record = asRecord(value);
+  if (!record) {
+    return [];
+  }
+
+  const values = Object.values(record);
+  if (values.length === 0) {
+    return [];
+  }
+
+  const objectLikeCount = values.filter(
+    (v) => typeof v === "object" && v !== null,
+  ).length;
+
+  return objectLikeCount > 0 ? values : [];
+};
+
 const extractMembershipsArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
@@ -268,18 +355,63 @@ const extractMembershipsArray = (payload: unknown): unknown[] => {
     root.groups,
     asRecord(root.data)?.groups,
     asRecord(root.data)?.memberships,
+    asRecord(root.data)?.rows,
+    asRecord(root.data)?.list,
     root.data,
     root.items,
     root.results,
+    root.rows,
+    root.list,
     asRecord(root.data)?.items,
   ];
 
   for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate;
+    const arr = toArray(candidate);
+    if (arr.length > 0) {
+      return arr;
     }
   }
   return [];
+};
+
+const enrichFallbackNames = async (
+  groups: GroupListItem[],
+  apiUrl: string,
+  idToken: string,
+): Promise<GroupListItem[]> => {
+  return Promise.all(
+    groups.map(async (group) => {
+      const isFallback = /^グループ\s+\d+$/.test(group.name);
+      if (!isFallback || !group.id) {
+        return group;
+      }
+
+      const res = await fetch(`${apiUrl}/groups/${group.id}`, {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+        cache: "no-store",
+      }).catch(() => null);
+
+      if (!res?.ok) {
+        return group;
+      }
+
+      const payload = await res.json().catch(() => null);
+      const root = asRecord(payload);
+      const detail = asRecord(root?.group) ?? asRecord(root?.data) ?? root;
+      const name = pickLikelyGroupName(detail) ?? pickLikelyGroupName(root);
+
+      if (!name) {
+        return group;
+      }
+
+      return {
+        ...group,
+        name,
+      };
+    }),
+  );
 };
 
 export default async function GroupsPage() {
@@ -297,9 +429,15 @@ export default async function GroupsPage() {
   if (!apiUrl) {
     return (
       <div className="prose max-w-none p-6">
-        <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
-          グループ設定
-        </h1>
+        <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
+          <h1 className="text-2xl font-extrabold">グループ設定</h1>
+          <Link
+            href="/groups/empty?from=groups"
+            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+          >
+            グループ追加
+          </Link>
+        </div>
         <p className="mt-6">
           所属グループの確認・切り替え・管理を行うページです。
         </p>
@@ -310,9 +448,15 @@ export default async function GroupsPage() {
   if (!idToken) {
     return (
       <div className="prose max-w-none p-6">
-        <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
-          グループ設定
-        </h1>
+        <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
+          <h1 className="text-2xl font-extrabold">グループ設定</h1>
+          <Link
+            href="/groups/empty?from=groups"
+            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+          >
+            グループ追加
+          </Link>
+        </div>
         <p className="mt-6 text-sm text-red-600">
           セッション情報の取得に失敗しました。再サインインしてください。
         </p>
@@ -358,21 +502,98 @@ export default async function GroupsPage() {
     }
   }
 
-  let groupList =
-    groupsFromGroupsApi.length > 0
-      ? groupsFromGroupsApi.map((group) => {
-          const role =
-            (group.id ? roleByKey.get(`id:${group.id}`) : undefined) ??
-            (group.ashareKey
-              ? roleByKey.get(`share:${group.ashareKey}`)
-              : undefined);
+  const mergedMap = new Map<string, GroupListItem>();
 
-          return {
-            ...group,
-            role: role ?? group.role,
-          };
-        })
-      : groupsFromMemberships;
+  const normalizeText = (value?: string) =>
+    (value ?? "").trim().toLowerCase();
+
+  const isFallbackName = (name?: string) => /^グループ\s+\d+$/.test(name ?? "");
+
+  const findExistingKey = (group: GroupListItem): string | undefined => {
+    const nextId = normalizeText(group.id);
+    const nextShare = normalizeText(group.ashareKey);
+    const nextName = normalizeText(group.name);
+    let foundKey: string | undefined;
+
+    mergedMap.forEach((prev, key) => {
+      if (foundKey) {
+        return;
+      }
+
+      const prevId = normalizeText(prev.id);
+      const prevShare = normalizeText(prev.ashareKey);
+      const prevName = normalizeText(prev.name);
+
+      if (nextId && prevId && nextId === prevId) {
+        foundKey = key;
+        return;
+      }
+
+      if (nextShare && prevShare && nextShare === prevShare) {
+        foundKey = key;
+        return;
+      }
+
+      if (
+        nextName &&
+        prevName &&
+        nextName === prevName &&
+        !isFallbackName(group.name) &&
+        !isFallbackName(prev.name)
+      ) {
+        foundKey = key;
+        return;
+      }
+    });
+
+    return foundKey;
+  };
+
+  const put = (group: GroupListItem) => {
+    const preferredKey = group.id
+      ? `id:${group.id}`
+      : group.ashareKey
+        ? `share:${group.ashareKey}`
+        : `name:${group.name}`;
+
+    const existingKey = findExistingKey(group);
+    const key = existingKey ?? preferredKey;
+
+    const prev = mergedMap.get(key);
+    if (!prev) {
+      mergedMap.set(key, group);
+      return;
+    }
+
+    mergedMap.set(key, {
+      ...prev,
+      ...group,
+      name:
+        isFallbackName(prev.name) && !isFallbackName(group.name)
+          ? group.name
+          : prev.name,
+      role: group.role ?? prev.role,
+    });
+  };
+
+  for (const group of groupsFromGroupsApi) {
+    const role =
+      (group.id ? roleByKey.get(`id:${group.id}`) : undefined) ??
+      (group.ashareKey ? roleByKey.get(`share:${group.ashareKey}`) : undefined);
+
+    put({
+      ...group,
+      role: role ?? group.role,
+    });
+  }
+
+  for (const group of groupsFromMemberships) {
+    put(group);
+  }
+
+  let groupList = Array.from(mergedMap.values());
+
+  groupList = await enrichFallbackNames(groupList, apiUrl, idToken);
 
   if (groupList.length === 0) {
     redirect("/groups/empty");
@@ -380,9 +601,15 @@ export default async function GroupsPage() {
 
   return (
     <div className="prose max-w-none p-6">
-      <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
-        グループ設定
-      </h1>
+      <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
+        <h1 className="text-2xl font-extrabold">グループ設定</h1>
+        <Link
+          href="/groups/empty?from=groups"
+          className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+        >
+          グループ追加
+        </Link>
+      </div>
 
       <p className="mt-6 text-sm text-slate-600 dark:text-slate-300">
         あなたが参加しているグループは {groupList.length} 件です。
@@ -447,6 +674,14 @@ export default async function GroupsPage() {
                 <span className="font-medium break-all">
                   {group.role ?? "-"}
                 </span>
+              </div>
+
+              <div className="pt-2">
+                <GroupLeaveLink
+                  groupId={group.id}
+                  shareKey={group.ashareKey}
+                  groupName={group.name}
+                />
               </div>
             </div>
           </section>

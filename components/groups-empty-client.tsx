@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 export default function GroupsEmptyClient() {
@@ -12,6 +13,8 @@ export default function GroupsEmptyClient() {
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const showBackLink = searchParams.get("from") === "groups";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -157,6 +160,14 @@ export default function GroupsEmptyClient() {
       <p className="mt-10 text-sm text-gray-600 text-center">
         既にグループを登録済みの方は再度サインインして下さい
       </p>
+      {showBackLink ? (
+        <Link
+          href="/groups"
+          className="mt-3 text-sm font-semibold text-blue-600 hover:underline"
+        >
+          戻る
+        </Link>
+      ) : null}
     </div>
   );
 }
