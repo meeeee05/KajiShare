@@ -8,7 +8,7 @@ type AnyRecord = Record<string, unknown>;
 type GroupListItem = {
   id?: string;
   name: string;
-  ashareKey?: string;
+  shareKey?: string;
   ssignMode?: string;
   balanceType?: string;
   adminName?: string;
@@ -235,18 +235,18 @@ const buildGroupItem = (
     pickLikelyGroupName(sourceBase) ??
     fallbackName;
 
-  const ashareKey =
+  const shareKey =
     pickFirstString(sourceGroup, [
-      "ashare_key",
-      "a_share_key",
       "share_key",
       "shareKey",
+      "ashare_key",
+      "a_share_key",
     ]) ??
     pickFirstString(sourceBase, [
-      "ashare_key",
-      "a_share_key",
       "share_key",
       "shareKey",
+      "ashare_key",
+      "a_share_key",
     ]);
 
   const ssignMode =
@@ -276,7 +276,7 @@ const buildGroupItem = (
   return {
     id,
     name,
-    ashareKey,
+    shareKey,
     ssignMode,
     balanceType,
     adminName,
@@ -497,21 +497,20 @@ export default async function GroupsPage() {
     if (membershipGroup.id && membershipGroup.role) {
       roleByKey.set(`id:${membershipGroup.id}`, membershipGroup.role);
     }
-    if (membershipGroup.ashareKey && membershipGroup.role) {
-      roleByKey.set(`share:${membershipGroup.ashareKey}`, membershipGroup.role);
+    if (membershipGroup.shareKey && membershipGroup.role) {
+      roleByKey.set(`share:${membershipGroup.shareKey}`, membershipGroup.role);
     }
   }
 
   const mergedMap = new Map<string, GroupListItem>();
 
-  const normalizeText = (value?: string) =>
-    (value ?? "").trim().toLowerCase();
+  const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
   const isFallbackName = (name?: string) => /^グループ\s+\d+$/.test(name ?? "");
 
   const findExistingKey = (group: GroupListItem): string | undefined => {
     const nextId = normalizeText(group.id);
-    const nextShare = normalizeText(group.ashareKey);
+    const nextShare = normalizeText(group.shareKey);
     const nextName = normalizeText(group.name);
     let foundKey: string | undefined;
 
@@ -521,7 +520,7 @@ export default async function GroupsPage() {
       }
 
       const prevId = normalizeText(prev.id);
-      const prevShare = normalizeText(prev.ashareKey);
+      const prevShare = normalizeText(prev.shareKey);
       const prevName = normalizeText(prev.name);
 
       if (nextId && prevId && nextId === prevId) {
@@ -552,8 +551,8 @@ export default async function GroupsPage() {
   const put = (group: GroupListItem) => {
     const preferredKey = group.id
       ? `id:${group.id}`
-      : group.ashareKey
-        ? `share:${group.ashareKey}`
+      : group.shareKey
+        ? `share:${group.shareKey}`
         : `name:${group.name}`;
 
     const existingKey = findExistingKey(group);
@@ -579,7 +578,7 @@ export default async function GroupsPage() {
   for (const group of groupsFromGroupsApi) {
     const role =
       (group.id ? roleByKey.get(`id:${group.id}`) : undefined) ??
-      (group.ashareKey ? roleByKey.get(`share:${group.ashareKey}`) : undefined);
+      (group.shareKey ? roleByKey.get(`share:${group.shareKey}`) : undefined);
 
     put({
       ...group,
@@ -633,10 +632,10 @@ export default async function GroupsPage() {
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  ashare_key
+                  share_key
                 </span>
                 <span className="font-medium break-all">
-                  {group.ashareKey ?? "-"}
+                  {group.shareKey ?? "-"}
                 </span>
               </div>
 
@@ -679,7 +678,7 @@ export default async function GroupsPage() {
               <div className="pt-2">
                 <GroupLeaveLink
                   groupId={group.id}
-                  shareKey={group.ashareKey}
+                  shareKey={group.shareKey}
                   groupName={group.name}
                 />
               </div>
