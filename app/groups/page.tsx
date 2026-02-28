@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import Link from "next/link";
 import GroupLeaveLink from "@/components/group-leave-link";
+import GroupEditableField from "../../components/group-editable-field";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -626,7 +627,14 @@ export default async function GroupsPage() {
             key={group.id ?? `${group.name}-${index}`}
             className="rounded-lg border bg-card p-5"
           >
-            <h2 className="text-lg font-bold">{group.name}</h2>
+            <GroupEditableField
+              groupId={group.id}
+              shareKey={group.shareKey}
+              field="name"
+              value={group.name}
+              textClassName="text-lg font-bold"
+              inputClassName="text-base"
+            />
 
             <div className="mt-4 space-y-3">
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
@@ -642,18 +650,26 @@ export default async function GroupsPage() {
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   担当割り当て
                 </span>
-                <span className="font-medium break-all">
-                  {group.assign_mode ?? "-"}
-                </span>
+                <GroupEditableField
+                  groupId={group.id}
+                  shareKey={group.shareKey}
+                  field="assign_mode"
+                  value={group.assign_mode}
+                  textClassName="font-medium break-all"
+                />
               </div>
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   負担バランス
                 </span>
-                <span className="font-medium break-all">
-                  {group.balanceType ?? "-"}
-                </span>
+                <GroupEditableField
+                  groupId={group.id}
+                  shareKey={group.shareKey}
+                  field="balance_type"
+                  value={group.balanceType}
+                  textClassName="font-medium break-all"
+                />
               </div>
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
