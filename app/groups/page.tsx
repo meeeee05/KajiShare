@@ -240,12 +240,18 @@ const buildGroupItem = (
     pickFirstString(sourceGroup, [
       "share_key",
       "shareKey",
+      "sharekey",
+      "invite_code",
+      "inviteCode",
       "ashare_key",
       "a_share_key",
     ]) ??
     pickFirstString(sourceBase, [
       "share_key",
       "shareKey",
+      "sharekey",
+      "invite_code",
+      "inviteCode",
       "ashare_key",
       "a_share_key",
     ]);
@@ -574,6 +580,11 @@ export default async function GroupsPage() {
     mergedMap.set(key, {
       ...prev,
       ...group,
+      id: group.id ?? prev.id,
+      shareKey: group.shareKey ?? prev.shareKey,
+      assign_mode: group.assign_mode ?? prev.assign_mode,
+      balanceType: group.balanceType ?? prev.balanceType,
+      adminName: group.adminName ?? prev.adminName,
       name:
         isFallbackName(prev.name) && !isFallbackName(group.name)
           ? group.name
@@ -639,7 +650,7 @@ export default async function GroupsPage() {
             <div className="mt-4 space-y-3">
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  招待コード
+                  share_key
                 </span>
                 <span className="font-medium break-all">
                   {group.shareKey ?? "-"}
