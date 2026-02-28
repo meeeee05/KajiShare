@@ -9,7 +9,7 @@ type GroupListItem = {
   id?: string;
   name: string;
   shareKey?: string;
-  ssignMode?: string;
+  assign_mode?: string;
   balanceType?: string;
   adminName?: string;
   role?: string;
@@ -249,14 +249,20 @@ const buildGroupItem = (
       "a_share_key",
     ]);
 
-  const ssignMode =
+  const assign_mode =
     pickFirstString(sourceGroup, [
-      "ssign_mode",
-      "sign_mode",
       "assign_mode",
       "assignment_mode",
+      "assign_mode",
+      "assignmentMode",
+    ]) ??
+    pickFirstString(sourceBase, [
+      "assign_mode",
+      "assignment_mode",
+      "assign_mode",
+      "assignmentMode",
       "signMode",
-      "assignMode",
+      "assign_mode",
     ]) ??
     pickFirstString(sourceBase, [
       "ssign_mode",
@@ -264,7 +270,7 @@ const buildGroupItem = (
       "assign_mode",
       "assignment_mode",
       "signMode",
-      "assignMode",
+      "assign_mode",
     ]);
 
   const balanceType =
@@ -277,7 +283,7 @@ const buildGroupItem = (
     id,
     name,
     shareKey,
-    ssignMode,
+    assign_mode,
     balanceType,
     adminName,
   };
@@ -625,14 +631,7 @@ export default async function GroupsPage() {
             <div className="mt-4 space-y-3">
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  グループID
-                </span>
-                <span className="font-medium break-all">{group.id ?? "-"}</span>
-              </div>
-
-              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  share_key
+                  招待コード
                 </span>
                 <span className="font-medium break-all">
                   {group.shareKey ?? "-"}
@@ -641,16 +640,16 @@ export default async function GroupsPage() {
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  ssign_mode
+                  担当割り当て
                 </span>
                 <span className="font-medium break-all">
-                  {group.ssignMode ?? "-"}
+                  {group.assign_mode ?? "-"}
                 </span>
               </div>
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  balance_type
+                  負担バランス
                 </span>
                 <span className="font-medium break-all">
                   {group.balanceType ?? "-"}
@@ -659,7 +658,7 @@ export default async function GroupsPage() {
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  Admin
+                  管理者
                 </span>
                 <span className="font-medium break-all">
                   {group.adminName ?? "-"}
