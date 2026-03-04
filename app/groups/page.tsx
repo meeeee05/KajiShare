@@ -366,16 +366,24 @@ const extractMembershipsArray = (payload: unknown): unknown[] => {
   const candidates: unknown[] = [
     root.memberships,
     root.groups,
+    asRecord(root.data)?.data,
     asRecord(root.data)?.groups,
     asRecord(root.data)?.memberships,
     asRecord(root.data)?.rows,
     asRecord(root.data)?.list,
+    asRecord(root.data)?.results,
+    asRecord(root.data)?.items,
+    asRecord(asRecord(root.data)?.data)?.groups,
+    asRecord(asRecord(root.data)?.data)?.memberships,
+    asRecord(asRecord(root.data)?.data)?.rows,
+    asRecord(asRecord(root.data)?.data)?.list,
+    asRecord(asRecord(root.data)?.data)?.results,
+    asRecord(asRecord(root.data)?.data)?.items,
     root.data,
     root.items,
     root.results,
     root.rows,
     root.list,
-    asRecord(root.data)?.items,
   ];
 
   for (const candidate of candidates) {
@@ -478,29 +486,43 @@ export default async function GroupsPage() {
   }
 
   let memberships: unknown[] = [];
+  const trimmedApiUrl = apiUrl.replace(/\/+$/, "");
+  const v1ApiUrl = trimmedApiUrl.endsWith("/api/v1")
+    ? trimmedApiUrl
+    : `${trimmedApiUrl}/api/v1`;
 
-  const res = await fetch(`${apiUrl}/memberships`, {
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
-    cache: "no-store",
-  }).catch(() => null);
+  const fetchFirstOkJson = async (urls: string[]): Promise<unknown> => {
+    for (const url of urls) {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+        cache: "no-store",
+      }).catch(() => null);
 
-  if (res?.ok) {
-    const payload = await res.json().catch(() => null);
-    memberships = extractMembershipsArray(payload);
-  }
+      if (!res?.ok) {
+        continue;
+      }
 
-  const groupsRes = await fetch(`${apiUrl}/groups`, {
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
-    cache: "no-store",
-  }).catch(() => null);
+      const payload = await res.json().catch(() => null);
+      if (payload != null) {
+        return payload;
+      }
+    }
 
-  const groupsPayload = groupsRes?.ok
-    ? await groupsRes.json().catch(() => null)
-    : null;
+    return null;
+  };
+
+  const membershipsPayload = await fetchFirstOkJson([
+    `${trimmedApiUrl}/memberships`,
+    `${v1ApiUrl}/memberships`,
+  ]);
+  memberships = extractMembershipsArray(membershipsPayload);
+
+  const groupsPayload = await fetchFirstOkJson([
+    `${trimmedApiUrl}/groups`,
+    `${v1ApiUrl}/groups`,
+  ]);
 
   const groupsFromGroupsApi = normalizeGroups(groupsPayload);
   const groupsFromMemberships = normalizeMemberships(memberships);

@@ -25,7 +25,7 @@ export default function GroupLeaveLink({
     }
 
     const ok = window.confirm(
-      `「${groupName}」から退会しますか？\nあなたが最後のメンバーの場合、グループは削除されます。`,
+      `「${groupName}」から退会しますか？\nグループ自体は削除されず、あなたのみ退会します。`,
     );
 
     if (!ok) {
