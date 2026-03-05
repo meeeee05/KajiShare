@@ -12,7 +12,14 @@ type GroupListItem = {
   shareKey?: string;
   assign_mode?: string;
   balanceType?: string;
-  adminName?: string;
+  createdById?: string;
+  creator?: {
+    id?: string;
+    name?: string;
+    email?: string;
+    picture?: string;
+    accountType?: string;
+  };
   role?: string;
 };
 
@@ -137,7 +144,7 @@ const pickLikelyGroupName = (obj: AnyRecord | null): string | undefined => {
   return undefined;
 };
 
-const pickAdminName = (
+/*const pickAdminName = (
   group: AnyRecord | null,
   membership: AnyRecord | null,
 ): string | undefined => {
@@ -216,7 +223,7 @@ const pickAdminName = (
   }
 
   return undefined;
-};
+};*/
 
 const buildGroupItem = (
   group: AnyRecord | null,
@@ -284,7 +291,39 @@ const buildGroupItem = (
     pickFirstString(sourceGroup, ["balance_type", "balanceType"]) ??
     pickFirstString(sourceBase, ["balance_type", "balanceType"]);
 
-  const adminName = pickAdminName(sourceGroup, sourceBase);
+  const creatorSource =
+    asRecord(sourceGroup?.creator) ??
+    asRecord(sourceBase?.creator) ??
+    asRecord(sourceGroup?.created_by) ??
+    asRecord(sourceBase?.created_by) ??
+    asRecord(sourceGroup?.createdBy) ??
+    asRecord(sourceBase?.createdBy);
+
+  const createdById =
+    pickFirstString(sourceGroup, ["created_by_id", "createdById"]) ??
+    pickFirstString(sourceBase, ["created_by_id", "createdById"]);
+
+  const creator = creatorSource
+    ? {
+        id: pickFirstString(creatorSource, ["id", "user_id", "userId"]),
+        name: pickFirstString(creatorSource, [
+          "name",
+          "full_name",
+          "fullName",
+          "display_name",
+          "displayName",
+          "username",
+        ]),
+        email: pickFirstString(creatorSource, ["email"]),
+        picture: pickFirstString(creatorSource, ["picture", "image", "avatar"]),
+        accountType: pickFirstString(creatorSource, [
+          "account_type",
+          "accountType",
+        ]),
+      }
+    : undefined;
+
+  //const adminName = creator?.name ?? pickAdminName(sourceGroup, sourceBase);
 
   return {
     id,
@@ -292,7 +331,8 @@ const buildGroupItem = (
     shareKey,
     assign_mode,
     balanceType,
-    adminName,
+    createdById,
+    creator,
   };
 };
 
@@ -520,8 +560,8 @@ export default async function GroupsPage() {
   memberships = extractMembershipsArray(membershipsPayload);
 
   const groupsPayload = await fetchFirstOkJson([
-    `${trimmedApiUrl}/groups`,
     `${v1ApiUrl}/groups`,
+    `${trimmedApiUrl}/groups`,
   ]);
 
   const groupsFromGroupsApi = normalizeGroups(groupsPayload);
@@ -606,7 +646,8 @@ export default async function GroupsPage() {
       shareKey: group.shareKey ?? prev.shareKey,
       assign_mode: group.assign_mode ?? prev.assign_mode,
       balanceType: group.balanceType ?? prev.balanceType,
-      adminName: group.adminName ?? prev.adminName,
+      createdById: group.createdById ?? prev.createdById,
+      creator: group.creator ?? prev.creator,
       name:
         isFallbackName(prev.name) && !isFallbackName(group.name)
           ? group.name
@@ -710,7 +751,7 @@ export default async function GroupsPage() {
                   管理者
                 </span>
                 <span className="font-medium break-all">
-                  {group.adminName ?? "-"}
+                  {group.creator?.name ?? "-"}
                 </span>
               </div>
 
