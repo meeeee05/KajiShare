@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Pencil } from "lucide-react";
 
 type EditableField = "name" | "assign_mode" | "balance_type";
@@ -9,6 +10,7 @@ type EditableField = "name" | "assign_mode" | "balance_type";
 type Props = {
   groupId?: string;
   shareKey?: string;
+  apiUrl?: string;
   field: EditableField;
   value?: string;
   textClassName?: string;
@@ -24,12 +26,14 @@ const fieldLabelMap: Record<EditableField, string> = {
 export default function GroupEditableField({
   groupId,
   shareKey,
+  apiUrl,
   field,
   value,
   textClassName,
   inputClassName,
 }: Props) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -60,29 +64,141 @@ export default function GroupEditableField({
 
     startTransition(async () => {
       setError(null);
-      const res = await fetch("/api/groups/update", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          groupId,
-          shareKey,
-          [field]: trimmed,
-        }),
-      }).catch(() => null);
+      const token = (session?.user as any)?.idToken as string | undefined;
+      const base = apiUrl?.replace(/\/+$/, "");
+      const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
-      if (!res?.ok) {
-        const data = await res?.json().catch(() => null);
-        setError(
-          data?.error ??
-            `${label}の更新に失敗しました。時間をおいて再度お試しください。`,
-        );
+      if (!base || !v1Base || !token) {
+        setError("認証情報またはAPI設定が不足しています。");
         return;
       }
 
-      setEditing(false);
-      router.refresh();
+      const updateBody: Record<string, string> = {
+        [field]: trimmed,
+      };
+
+      const attempts: Array<{
+        method: "PATCH" | "PUT" | "POST";
+        url: string;
+        body: Record<string, unknown>;
+      }> = [];
+
+      if (groupId) {
+        attempts.push(
+          {
+            method: "PATCH",
+            url: `${base}/groups/${encodeURIComponent(groupId)}`,
+            body: updateBody,
+          },
+          {
+            method: "PUT",
+            url: `${base}/groups/${encodeURIComponent(groupId)}`,
+            body: updateBody,
+          },
+          {
+            method: "PATCH",
+            url: `${v1Base}/groups/${encodeURIComponent(groupId)}`,
+            body: updateBody,
+          },
+          {
+            method: "PUT",
+            url: `${v1Base}/groups/${encodeURIComponent(groupId)}`,
+            body: updateBody,
+          },
+        );
+      }
+
+      if (shareKey) {
+        attempts.push(
+          {
+            method: "PATCH",
+            url: `${base}/groups/update`,
+            body: {
+              share_key: shareKey,
+              ...updateBody,
+            },
+          },
+          {
+            method: "POST",
+            url: `${base}/groups/update`,
+            body: {
+              share_key: shareKey,
+              ...updateBody,
+            },
+          },
+          {
+            method: "PATCH",
+            url: `${v1Base}/groups/update`,
+            body: {
+              share_key: shareKey,
+              ...updateBody,
+            },
+          },
+          {
+            method: "POST",
+            url: `${v1Base}/groups/update`,
+            body: {
+              share_key: shareKey,
+              ...updateBody,
+            },
+          },
+        );
+      }
+
+      if (groupId || shareKey) {
+        attempts.push(
+          {
+            method: "PATCH",
+            url: `${base}/groups`,
+            body: {
+              group_id: groupId,
+              share_key: shareKey,
+              ...updateBody,
+            },
+          },
+          {
+            method: "PATCH",
+            url: `${v1Base}/groups`,
+            body: {
+              group_id: groupId,
+              share_key: shareKey,
+              ...updateBody,
+            },
+          },
+        );
+      }
+
+      let lastMessage = `${label}の更新に失敗しました。時間をおいて再度お試しください。`;
+
+      for (const attempt of attempts) {
+        const res = await fetch(attempt.url, {
+          method: attempt.method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(attempt.body),
+        }).catch(() => null);
+
+        if (!res) {
+          continue;
+        }
+
+        if (res.ok) {
+          setEditing(false);
+          router.refresh();
+          return;
+        }
+
+        const data = await res.json().catch(() => null);
+        lastMessage =
+          (data as any)?.error ??
+          (data as any)?.message ??
+          `${label}の更新に失敗しました。(status: ${res.status})`;
+      }
+
+      setError(lastMessage);
+      return;
     });
   };
 

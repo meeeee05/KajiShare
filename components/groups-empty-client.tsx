@@ -111,21 +111,52 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
     setError(null);
 
     try {
-      const res = await fetch("/api/groups", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: trimmed }),
-      });
+      const token = (session?.user as any)?.idToken as string | undefined;
+      const base = apiUrl?.replace(/\/+$/, "");
+      const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
-      const data = await res.json().catch(() => null);
+      if (!base || !v1Base || !token) {
+        setError("認証情報またはAPI設定が不足しています。");
+        return;
+      }
 
-      if (!res.ok) {
-        setError(
+      const endpoints = Array.from(
+        new Set([`${base}/groups`, `${v1Base}/groups`]),
+      );
+
+      let created = false;
+      let lastError =
+        "グループの登録に失敗しました。時間をおいて再度お試しください。";
+
+      for (const endpoint of endpoints) {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ name: trimmed }),
+        }).catch(() => null);
+
+        if (!res) {
+          continue;
+        }
+
+        const data = await res.json().catch(() => null);
+
+        if (res.ok) {
+          created = true;
+          break;
+        }
+
+        lastError =
           (data as any)?.error ??
-            "グループの登録に失敗しました。時間をおいて再度お試しください。",
-        );
+          (data as any)?.message ??
+          `グループの登録に失敗しました。(status: ${res.status})`;
+      }
+
+      if (!created) {
+        setError(lastError);
         return;
       }
 
