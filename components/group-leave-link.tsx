@@ -2,19 +2,23 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 type Props = {
   groupId?: string;
   shareKey?: string;
   groupName: string;
+  apiUrl?: string;
 };
 
 export default function GroupLeaveLink({
   groupId,
   shareKey,
   groupName,
+  apiUrl,
 }: Props) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [isLeaving, setIsLeaving] = useState(false);
 
   const canLeave = Boolean(groupId || shareKey);
@@ -34,13 +38,59 @@ export default function GroupLeaveLink({
 
     setIsLeaving(true);
 
-    const res = await fetch("/api/groups/leave", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const token = (session?.user as any)?.idToken as string | undefined;
+    const base = apiUrl?.replace(/\/+$/, "");
+    const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
+
+    if (!base || !v1Base || !token) {
+      window.alert("認証情報またはAPI設定が不足しています。");
+      setIsLeaving(false);
+      return;
+    }
+
+    let targetGroupId = groupId;
+
+    if (!targetGroupId && shareKey) {
+      const groupsRes = await fetch(`${v1Base}/groups`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      }).catch(() => null);
+
+      const groupsPayload = await groupsRes?.json().catch(() => null);
+      const groups = Array.isArray((groupsPayload as any)?.data)
+        ? (groupsPayload as any).data
+        : Array.isArray(groupsPayload)
+          ? groupsPayload
+          : [];
+
+      const found = groups.find((g: any) => {
+        const row = g?.group ?? g?.data ?? g;
+        return (row?.share_key ?? row?.shareKey) === shareKey;
+      });
+
+      const foundRow = found?.group ?? found?.data ?? found;
+      targetGroupId = foundRow?.id != null ? String(foundRow.id) : undefined;
+    }
+
+    if (!targetGroupId) {
+      window.alert("退会対象のグループIDを取得できませんでした。");
+      setIsLeaving(false);
+      return;
+    }
+
+    const res = await fetch(
+      `${v1Base}/groups/${encodeURIComponent(targetGroupId)}/leave`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
       },
-      body: JSON.stringify({ groupId, shareKey }),
-    }).catch(() => null);
+    ).catch(() => null);
 
     if (!res?.ok) {
       const data = await res?.json().catch(() => null);

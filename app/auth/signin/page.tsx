@@ -11,7 +11,7 @@ export default function SignInPage() {
         <div className="flex flex-col items-center gap-4 text-center">
           <Image
             src="https://next-auth.js.org/img/logo/logo-sm.png"
-            alt="KajiShare ロゴ"
+            alt="KajiShare"
             width={56}
             height={56}
             priority
@@ -30,7 +30,7 @@ export default function SignInPage() {
           <span>Googleでサインイン</span>
           <Image
             src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-            alt="Google ロゴ"
+            alt="Google"
             width={20}
             height={20}
             style={{ display: "inline-block" }}

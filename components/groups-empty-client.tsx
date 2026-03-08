@@ -3,9 +3,90 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 
-export default function GroupsEmptyClient() {
+type Props = {
+  apiUrl?: string;
+};
+
+type AnyRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): AnyRecord | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as AnyRecord;
+};
+
+const pickFirstString = (
+  obj: AnyRecord | null,
+  keys: string[],
+): string | undefined => {
+  if (!obj) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return undefined;
+};
+
+const extractGroups = (payload: unknown): AnyRecord[] => {
+  if (Array.isArray(payload)) {
+    return payload.map((v) => asRecord(v)).filter((v): v is AnyRecord => !!v);
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const candidates = [
+    root.data,
+    root.groups,
+    root.items,
+    root.results,
+    root.rows,
+    root.list,
+    asRecord(root.data)?.groups,
+    asRecord(root.data)?.items,
+    asRecord(root.data)?.results,
+    asRecord(root.data)?.rows,
+    asRecord(root.data)?.list,
+  ];
+
+  for (const candidate of candidates) {
+    if (!Array.isArray(candidate)) {
+      continue;
+    }
+
+    return candidate
+      .map((v) => {
+        const rootItem = asRecord(v);
+        return (
+          asRecord(rootItem?.group) ??
+          asRecord(rootItem?.data) ??
+          asRecord(rootItem?.attributes) ??
+          rootItem
+        );
+      })
+      .filter((v): v is AnyRecord => !!v);
+  }
+
+  return [];
+};
+
+export default function GroupsEmptyClient({ apiUrl }: Props) {
   const [groupName, setGroupName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
@@ -13,6 +94,7 @@ export default function GroupsEmptyClient() {
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const router = useRouter();
+  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const showBackLink = searchParams.get("from") === "groups";
 
@@ -69,12 +151,58 @@ export default function GroupsEmptyClient() {
     setJoinError(null);
 
     try {
-      const res = await fetch("/api/groups/join", {
+      const token = (session?.user as any)?.idToken as string | undefined;
+      const base = apiUrl?.replace(/\/+$/, "");
+      const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
+
+      if (!base || !v1Base || !token) {
+        setJoinError("認証情報またはAPI設定が不足しています。");
+        return;
+      }
+
+      const groupsRes = await fetch(`${v1Base}/groups`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      }).catch(() => null);
+
+      if (!groupsRes?.ok) {
+        const groupsError = await groupsRes?.json().catch(() => null);
+        setJoinError(
+          (groupsError as any)?.error ??
+            (groupsError as any)?.message ??
+            "グループ一覧の取得に失敗しました。",
+        );
+        return;
+      }
+
+      const groupsPayload = await groupsRes.json().catch(() => null);
+      const groups = extractGroups(groupsPayload);
+
+      const matched = groups.some((group) => {
+        const shareKey =
+          pickFirstString(group, ["share_key", "shareKey"]) ??
+          pickFirstString(asRecord(group.attributes), [
+            "share_key",
+            "shareKey",
+          ]) ??
+          pickFirstString(asRecord(group.data), ["share_key", "shareKey"]);
+        return shareKey === trimmed;
+      });
+
+      if (!matched) {
+        setJoinError("招待IDが見つかりません。入力内容をご確認ください。");
+        return;
+      }
+
+      const res = await fetch(`${v1Base}/groups/join`, {
         method: "POST",
         headers: {
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ inviteCode: trimmed }),
+        body: JSON.stringify({ share_key: trimmed }),
       });
 
       const data = await res.json().catch(() => null);

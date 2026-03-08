@@ -28,7 +28,7 @@ export default function HelpContactForm() {
     setSuccess(null);
 
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch("/api/e-mail", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

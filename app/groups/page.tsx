@@ -531,7 +531,9 @@ export default async function GroupsPage() {
     ? trimmedApiUrl
     : `${trimmedApiUrl}/api/v1`;
 
-  const fetchFirstOkJson = async (urls: string[]): Promise<unknown> => {
+  const fetchAllOkJson = async (urls: string[]): Promise<unknown[]> => {
+    const payloads: unknown[] = [];
+
     for (const url of urls) {
       const res = await fetch(url, {
         headers: {
@@ -546,25 +548,29 @@ export default async function GroupsPage() {
 
       const payload = await res.json().catch(() => null);
       if (payload != null) {
-        return payload;
+        payloads.push(payload);
       }
     }
 
-    return null;
+    return payloads;
   };
 
-  const membershipsPayload = await fetchFirstOkJson([
+  const membershipsPayloads = await fetchAllOkJson([
     `${trimmedApiUrl}/memberships`,
     `${v1ApiUrl}/memberships`,
   ]);
-  memberships = extractMembershipsArray(membershipsPayload);
+  memberships = membershipsPayloads.flatMap((payload) =>
+    extractMembershipsArray(payload),
+  );
 
-  const groupsPayload = await fetchFirstOkJson([
+  const groupsPayloads = await fetchAllOkJson([
     `${v1ApiUrl}/groups`,
     `${trimmedApiUrl}/groups`,
   ]);
 
-  const groupsFromGroupsApi = normalizeGroups(groupsPayload);
+  const groupsFromGroupsApi = groupsPayloads.flatMap((payload) =>
+    normalizeGroups(payload),
+  );
   const groupsFromMemberships = normalizeMemberships(memberships);
 
   const roleByKey = new Map<string, string>();
@@ -769,6 +775,7 @@ export default async function GroupsPage() {
                   groupId={group.id}
                   shareKey={group.shareKey}
                   groupName={group.name}
+                  apiUrl={apiUrl}
                 />
               </div>
             </div>

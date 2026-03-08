@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import AccountDeleteButton from "@/components/account-delete-button";
-import AccountEditableFields from "@/components/account-editable-fields";
 
 export default async function AccountPage() {
   const session = await auth();
@@ -11,6 +10,7 @@ export default async function AccountPage() {
   }
 
   const user = session.user;
+  const apiUrl = process.env.API_URL;
 
   return (
     <div className="prose max-w-none p-6">
@@ -18,12 +18,27 @@ export default async function AccountPage() {
         アカウント設定
       </h1>
 
-      <AccountEditableFields
-        initialName={user?.name}
-        initialEmail={user?.email}
-      />
+      <div className="not-prose mt-8 space-y-6">
+        <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+          <span className="font-semibold text-slate-600 dark:text-slate-300">
+            名前
+          </span>
+          <span className="font-medium break-all">
+            {user?.name || "未設定"}
+          </span>
+        </div>
 
-      <AccountDeleteButton />
+        <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+          <span className="font-semibold text-slate-600 dark:text-slate-300">
+            メール
+          </span>
+          <span className="font-medium break-all">
+            {user?.email || "未設定"}
+          </span>
+        </div>
+      </div>
+
+      <AccountDeleteButton apiUrl={apiUrl} />
     </div>
   );
 }
