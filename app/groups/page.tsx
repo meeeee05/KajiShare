@@ -249,6 +249,8 @@ export default async function GroupsPage() {
     );
   }
 
+  const currentUserName = normalizeText(session.user?.name ?? undefined);
+
   const trimmedApiUrl = apiUrl.replace(/\/+$/, "");
   const v1ApiUrl = trimmedApiUrl.endsWith("/api/v1")
     ? trimmedApiUrl
@@ -477,7 +479,7 @@ export default async function GroupsPage() {
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   管理者
                 </span>
-                <span className="font-medium break-all">
+                <span className="font-semibold break-all">
                   {group.creator?.name ?? "-"}
                 </span>
               </div>
@@ -486,8 +488,11 @@ export default async function GroupsPage() {
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   あなたの権限
                 </span>
-                <span className="font-medium break-all">
-                  {group.role ?? "-"}
+                <span className="font-semibold break-all">
+                  {currentUserName !== "" &&
+                  currentUserName === normalizeText(group.creator?.name)
+                    ? "管理者"
+                    : "メンバー"}
                 </span>
               </div>
 

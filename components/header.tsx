@@ -1,7 +1,7 @@
 "use client";
 
 import { MainNav } from "./main-nav";
-import UserButton from "./user-button";
+import UserButton from "./settings";
 import { usePathname } from "next/navigation";
 
 export default function Header() {
