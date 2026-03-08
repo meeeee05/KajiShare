@@ -23,6 +23,41 @@ const fieldLabelMap: Record<EditableField, string> = {
   balance_type: "負担バランス",
 };
 
+const ASSIGN_MODE_OPTIONS = [
+  { value: "manual", label: "手動で決める" },
+  { value: "random", label: "ランダムで決める" },
+  { value: "balance", label: "バランスを考慮する" },
+] as const;
+
+const normalizeAssignMode = (value?: string) => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === "manual" || normalized === "手動で決める") {
+    return "manual";
+  }
+  if (normalized === "random" || normalized === "ランダムで決める") {
+    return "random";
+  }
+  if (
+    normalized === "balance" ||
+    normalized === "balanced" ||
+    normalized === "バランスを考慮する"
+  ) {
+    return "balance";
+  }
+
+  return value ?? "";
+};
+
+const displayAssignMode = (value?: string) => {
+  const normalized = normalizeAssignMode(value);
+  const found = ASSIGN_MODE_OPTIONS.find((option) => option.value === normalized);
+  return found?.label ?? value ?? "";
+};
+
 export default function GroupEditableField({
   groupId,
   shareKey,
@@ -41,9 +76,16 @@ export default function GroupEditableField({
 
   const label = fieldLabelMap[field];
   const currentValue = useMemo(() => value ?? "", [value]);
+  const displayValue = useMemo(() => {
+    if (field !== "assign_mode") {
+      return currentValue;
+    }
+
+    return displayAssignMode(currentValue);
+  }, [field, currentValue]);
 
   const onStartEdit = () => {
-    setDraft(currentValue);
+    setDraft(field === "assign_mode" ? normalizeAssignMode(currentValue) : currentValue);
     setError(null);
     setEditing(true);
   };
@@ -206,13 +248,30 @@ export default function GroupEditableField({
     return (
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
-            aria-label={`${label}入力`}
-            disabled={isPending}
-          />
+          {field === "assign_mode" ? (
+            <select
+              value={normalizeAssignMode(draft)}
+              onChange={(e) => setDraft(e.target.value)}
+              className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              aria-label={`${label}入力`}
+              disabled={isPending}
+            >
+              <option value="">選択してください</option>
+              {ASSIGN_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              aria-label={`${label}入力`}
+              disabled={isPending}
+            />
+          )}
           <button
             type="button"
             onClick={onSave}
@@ -238,7 +297,7 @@ export default function GroupEditableField({
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
       <span className={`${textClassName ?? ""} min-w-0 break-all`}>
-        {currentValue || "-"}
+        {displayValue || (field === "assign_mode" ? "選択してください" : "-")}
       </span>
       <button
         type="button"

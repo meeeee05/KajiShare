@@ -457,7 +457,7 @@ export default async function GroupsPage() {
                   apiUrl={apiUrl}
                   field="assign_mode"
                   value={group.assign_mode}
-                  textClassName="font-medium break-all"
+                  textClassName="font-medium text-sm sm:text-base break-all"
                 />
               </div>
 
