@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Pencil } from "lucide-react";
 
-type EditableField = "name" | "assign_mode" | "balance_type";
+type EditableField = "name" | "assign_mode" | "balanced_type";
 
 type Props = {
   groupId?: string;
@@ -20,13 +20,13 @@ type Props = {
 const fieldLabelMap: Record<EditableField, string> = {
   name: "グループ名",
   assign_mode: "担当割り当て",
-  balance_type: "負担バランス",
+  balanced_type: "負担バランス",
 };
 
 const ASSIGN_MODE_OPTIONS = [
   { value: "manual", label: "手動で決める" },
   { value: "random", label: "ランダムで決める" },
-  { value: "balance", label: "バランスを考慮する" },
+  { value: "balanced", label: "バランスを考慮する" },
 ] as const;
 
 const normalizeAssignMode = (value?: string) => {
@@ -41,12 +41,8 @@ const normalizeAssignMode = (value?: string) => {
   if (normalized === "random" || normalized === "ランダムで決める") {
     return "random";
   }
-  if (
-    normalized === "balance" ||
-    normalized === "balanced" ||
-    normalized === "バランスを考慮する"
-  ) {
-    return "balance";
+  if (normalized === "balanced" || normalized === "バランスを考慮する") {
+    return "balanced";
   }
 
   return value ?? "";
@@ -54,7 +50,9 @@ const normalizeAssignMode = (value?: string) => {
 
 const displayAssignMode = (value?: string) => {
   const normalized = normalizeAssignMode(value);
-  const found = ASSIGN_MODE_OPTIONS.find((option) => option.value === normalized);
+  const found = ASSIGN_MODE_OPTIONS.find(
+    (option) => option.value === normalized,
+  );
   return found?.label ?? value ?? "";
 };
 
@@ -85,7 +83,11 @@ export default function GroupEditableField({
   }, [field, currentValue]);
 
   const onStartEdit = () => {
-    setDraft(field === "assign_mode" ? normalizeAssignMode(currentValue) : currentValue);
+    setDraft(
+      field === "assign_mode"
+        ? normalizeAssignMode(currentValue)
+        : currentValue,
+    );
     setError(null);
     setEditing(true);
   };
@@ -115,111 +117,31 @@ export default function GroupEditableField({
         return;
       }
 
+      if (!groupId) {
+        setError("グループIDが取得できないため更新できません。");
+        return;
+      }
+
+      const normalizedValue =
+        field === "assign_mode" ? normalizeAssignMode(trimmed) : trimmed;
+
       const updateBody: Record<string, string> = {
-        [field]: trimmed,
+        [field]: normalizedValue,
       };
 
-      const attempts: Array<{
-        method: "PATCH" | "PUT" | "POST";
-        url: string;
-        body: Record<string, unknown>;
-      }> = [];
-
-      if (groupId) {
-        attempts.push(
-          {
-            method: "PATCH",
-            url: `${base}/groups/${encodeURIComponent(groupId)}`,
-            body: updateBody,
-          },
-          {
-            method: "PUT",
-            url: `${base}/groups/${encodeURIComponent(groupId)}`,
-            body: updateBody,
-          },
-          {
-            method: "PATCH",
-            url: `${v1Base}/groups/${encodeURIComponent(groupId)}`,
-            body: updateBody,
-          },
-          {
-            method: "PUT",
-            url: `${v1Base}/groups/${encodeURIComponent(groupId)}`,
-            body: updateBody,
-          },
-        );
-      }
-
-      if (shareKey) {
-        attempts.push(
-          {
-            method: "PATCH",
-            url: `${base}/groups/update`,
-            body: {
-              share_key: shareKey,
-              ...updateBody,
-            },
-          },
-          {
-            method: "POST",
-            url: `${base}/groups/update`,
-            body: {
-              share_key: shareKey,
-              ...updateBody,
-            },
-          },
-          {
-            method: "PATCH",
-            url: `${v1Base}/groups/update`,
-            body: {
-              share_key: shareKey,
-              ...updateBody,
-            },
-          },
-          {
-            method: "POST",
-            url: `${v1Base}/groups/update`,
-            body: {
-              share_key: shareKey,
-              ...updateBody,
-            },
-          },
-        );
-      }
-
-      if (groupId || shareKey) {
-        attempts.push(
-          {
-            method: "PATCH",
-            url: `${base}/groups`,
-            body: {
-              group_id: groupId,
-              share_key: shareKey,
-              ...updateBody,
-            },
-          },
-          {
-            method: "PATCH",
-            url: `${v1Base}/groups`,
-            body: {
-              group_id: groupId,
-              share_key: shareKey,
-              ...updateBody,
-            },
-          },
-        );
-      }
+      const endpoint = `${v1Base}/groups/${encodeURIComponent(groupId)}`;
+      const attempts: Array<"PATCH" | "PUT"> = ["PATCH", "PUT"];
 
       let lastMessage = `${label}の更新に失敗しました。時間をおいて再度お試しください。`;
 
-      for (const attempt of attempts) {
-        const res = await fetch(attempt.url, {
-          method: attempt.method,
+      for (const method of attempts) {
+        const res = await fetch(endpoint, {
+          method,
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(attempt.body),
+          body: JSON.stringify(updateBody),
         }).catch(() => null);
 
         if (!res) {

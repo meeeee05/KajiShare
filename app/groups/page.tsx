@@ -11,7 +11,7 @@ type GroupListItem = {
   name: string;
   share_key?: string;
   assign_mode?: string;
-  balanceType?: string;
+  balancedType?: string;
   creator?: {
     name?: string;
   };
@@ -22,7 +22,31 @@ const SHARE_KEY = "share_key";
 
 const ASSIGN_MODE = "assign_mode";
 
-const BALANCE_TYPE = "balance_type";
+const balanced_TYPE = "balanced_type";
+
+const normalizeAssignMode = (value?: string) => {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.includes("バランス") || normalized.includes("balanced")) {
+    return "balanced";
+  }
+  if (normalized.includes("random") || normalized.includes("ランダム")) {
+    return "random";
+  }
+  if (normalized.includes("manual") || normalized.includes("手動")) {
+    return "manual";
+  }
+
+  return normalized;
+};
+
+const isbalancedAssignMode = (value?: string) => {
+  return normalizeAssignMode(value) === "balanced";
+};
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
@@ -88,9 +112,13 @@ const buildGroupItem = (
 
   const share_key = pickFromSources(sourceGroup, sourceBase, [SHARE_KEY]);
 
-  const assign_mode = pickFromSources(sourceGroup, sourceBase, [ASSIGN_MODE]);
+  const assign_mode = normalizeAssignMode(
+    pickFromSources(sourceGroup, sourceBase, [ASSIGN_MODE]),
+  );
 
-  const balanceType = pickFromSources(sourceGroup, sourceBase, [BALANCE_TYPE]);
+  const balancedType = pickFromSources(sourceGroup, sourceBase, [
+    balanced_TYPE,
+  ]);
 
   const creatorSource = asRecord(sourceGroup?.creator);
 
@@ -105,7 +133,7 @@ const buildGroupItem = (
     name,
     share_key,
     assign_mode,
-    balanceType,
+    balancedType,
     creator,
   };
 };
@@ -372,7 +400,7 @@ export default async function GroupsPage() {
       id: group.id ?? prev.id,
       share_key: group.share_key ?? prev.share_key,
       assign_mode: group.assign_mode ?? prev.assign_mode,
-      balanceType: group.balanceType ?? prev.balanceType,
+      balancedType: group.balancedType ?? prev.balancedType,
       creator: group.creator ?? prev.creator,
       name:
         isFallbackName(prev.name) && !isFallbackName(group.name)
@@ -461,19 +489,21 @@ export default async function GroupsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  負担バランス
-                </span>
-                <GroupEditableField
-                  groupId={group.id}
-                  shareKey={group.share_key}
-                  apiUrl={apiUrl}
-                  field="balance_type"
-                  value={group.balanceType}
-                  textClassName="font-medium break-all"
-                />
-              </div>
+              {isbalancedAssignMode(group.assign_mode) ? (
+                <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">
+                    負担バランス
+                  </span>
+                  <GroupEditableField
+                    groupId={group.id}
+                    shareKey={group.share_key}
+                    apiUrl={apiUrl}
+                    field="balanced_type"
+                    value={group.balancedType}
+                    textClassName="font-medium break-all"
+                  />
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
