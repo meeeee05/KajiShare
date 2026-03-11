@@ -29,7 +29,7 @@ const ASSIGN_MODE_OPTIONS = [
   { value: "balanced", label: "バランスを考慮する" },
 ] as const;
 
-const BALANCED_TYPE_OPTIONS = [
+const BALANCE_TYPE_OPTIONS = [
   { value: "more", label: "多め" },
   { value: "less", label: "少なめ" },
 ] as const;
@@ -79,7 +79,7 @@ const normalizeBalancedType = (value?: string) => {
 
 const displayBalancedType = (value?: string) => {
   const normalized = normalizeBalancedType(value);
-  const found = BALANCED_TYPE_OPTIONS.find(
+  const found = BALANCE_TYPE_OPTIONS.find(
     (option) => option.value === normalized,
   );
   return found?.label ?? value ?? "";
@@ -235,7 +235,7 @@ export default function GroupEditableField({
               disabled={isPending}
             >
               <option value="">選択してください</option>
-              {BALANCED_TYPE_OPTIONS.map((option) => (
+              {BALANCE_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -275,7 +275,10 @@ export default function GroupEditableField({
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
       <span className={`${textClassName ?? ""} min-w-0 break-all`}>
-        {displayValue || (field === "assign_mode" || field === "balance_type" ? "選択してください" : "-")}
+        {displayValue ||
+          (field === "assign_mode" || field === "balance_type"
+            ? "選択してください"
+            : "-")}
       </span>
       <button
         type="button"

@@ -116,10 +116,7 @@ const buildGroupItem = (
     pickFromSources(sourceGroup, sourceBase, [ASSIGN_MODE]),
   );
 
-  const balancedType = pickFromSources(sourceGroup, sourceBase, [
-    BALANCE_TYPE,
-    "balanced_type",
-  ]);
+  const balancedType = pickFromSources(sourceGroup, sourceBase, [BALANCE_TYPE]);
 
   const creatorSource = asRecord(sourceGroup?.creator);
 
