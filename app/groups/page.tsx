@@ -22,7 +22,7 @@ const SHARE_KEY = "share_key";
 
 const ASSIGN_MODE = "assign_mode";
 
-const balanced_TYPE = "balanced_type";
+const BALANCE_TYPE = "balance_type";
 
 const normalizeAssignMode = (value?: string) => {
   const normalized = normalizeText(value);
@@ -117,7 +117,8 @@ const buildGroupItem = (
   );
 
   const balancedType = pickFromSources(sourceGroup, sourceBase, [
-    balanced_TYPE,
+    BALANCE_TYPE,
+    "balanced_type",
   ]);
 
   const creatorSource = asRecord(sourceGroup?.creator);
@@ -498,7 +499,7 @@ export default async function GroupsPage() {
                     groupId={group.id}
                     shareKey={group.share_key}
                     apiUrl={apiUrl}
-                    field="balanced_type"
+                    field="balance_type"
                     value={group.balancedType}
                     textClassName="font-medium break-all"
                   />

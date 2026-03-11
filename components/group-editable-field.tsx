@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Pencil } from "lucide-react";
 
-type EditableField = "name" | "assign_mode" | "balanced_type";
+type EditableField = "name" | "assign_mode" | "balance_type";
 
 type Props = {
   groupId?: string;
@@ -20,13 +20,18 @@ type Props = {
 const fieldLabelMap: Record<EditableField, string> = {
   name: "グループ名",
   assign_mode: "担当割り当て",
-  balanced_type: "負担バランス",
+  balance_type: "負担バランス",
 };
 
 const ASSIGN_MODE_OPTIONS = [
   { value: "manual", label: "手動で決める" },
   { value: "random", label: "ランダムで決める" },
   { value: "balanced", label: "バランスを考慮する" },
+] as const;
+
+const BALANCED_TYPE_OPTIONS = [
+  { value: "more", label: "多め" },
+  { value: "less", label: "少なめ" },
 ] as const;
 
 const normalizeAssignMode = (value?: string) => {
@@ -56,6 +61,30 @@ const displayAssignMode = (value?: string) => {
   return found?.label ?? value ?? "";
 };
 
+const normalizeBalancedType = (value?: string) => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === "more" || normalized === "多め") {
+    return "more";
+  }
+  if (normalized === "less" || normalized === "少なめ") {
+    return "less";
+  }
+
+  return value ?? "";
+};
+
+const displayBalancedType = (value?: string) => {
+  const normalized = normalizeBalancedType(value);
+  const found = BALANCED_TYPE_OPTIONS.find(
+    (option) => option.value === normalized,
+  );
+  return found?.label ?? value ?? "";
+};
+
 export default function GroupEditableField({
   groupId,
   shareKey,
@@ -75,18 +104,24 @@ export default function GroupEditableField({
   const label = fieldLabelMap[field];
   const currentValue = useMemo(() => value ?? "", [value]);
   const displayValue = useMemo(() => {
-    if (field !== "assign_mode") {
-      return currentValue;
+    if (field === "assign_mode") {
+      return displayAssignMode(currentValue);
     }
 
-    return displayAssignMode(currentValue);
+    if (field === "balance_type") {
+      return displayBalancedType(currentValue);
+    }
+
+    return currentValue;
   }, [field, currentValue]);
 
   const onStartEdit = () => {
     setDraft(
       field === "assign_mode"
         ? normalizeAssignMode(currentValue)
-        : currentValue,
+        : field === "balance_type"
+          ? normalizeBalancedType(currentValue)
+          : currentValue,
     );
     setError(null);
     setEditing(true);
@@ -123,10 +158,16 @@ export default function GroupEditableField({
       }
 
       const normalizedValue =
-        field === "assign_mode" ? normalizeAssignMode(trimmed) : trimmed;
+        field === "assign_mode"
+          ? normalizeAssignMode(trimmed)
+          : field === "balance_type"
+            ? normalizeBalancedType(trimmed)
+            : trimmed;
 
-      const updateBody: Record<string, string> = {
-        [field]: normalizedValue,
+      const updateBody: { group: Record<string, string> } = {
+        group: {
+          [field]: normalizedValue,
+        },
       };
 
       const endpoint = `${v1Base}/groups/${encodeURIComponent(groupId)}`;
@@ -185,6 +226,21 @@ export default function GroupEditableField({
                 </option>
               ))}
             </select>
+          ) : field === "balance_type" ? (
+            <select
+              value={normalizeBalancedType(draft)}
+              onChange={(e) => setDraft(e.target.value)}
+              className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              aria-label={`${label}入力`}
+              disabled={isPending}
+            >
+              <option value="">選択してください</option>
+              {BALANCED_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           ) : (
             <input
               value={draft}
@@ -219,7 +275,7 @@ export default function GroupEditableField({
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
       <span className={`${textClassName ?? ""} min-w-0 break-all`}>
-        {displayValue || (field === "assign_mode" ? "選択してください" : "-")}
+        {displayValue || (field === "assign_mode" || field === "balance_type" ? "選択してください" : "-")}
       </span>
       <button
         type="button"
