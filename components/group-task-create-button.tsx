@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -13,17 +13,31 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
+  const [name, setName] = useState("");
+  const [point, setPoint] = useState("");
+  const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const onCreate = () => {
+  const onCreate = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
     if (!groupId) {
       setError("グループIDがないため作成できません。");
       return;
     }
 
-    const title = window.prompt("タスク名を入力してください");
-    const trimmed = (title ?? "").trim();
-    if (!trimmed) {
+    const trimmedName = name.trim();
+    const trimmedPoint = point.trim();
+    const trimmedDescription = description.trim();
+
+    if (!trimmedName || !trimmedPoint || !trimmedDescription) {
+      setError("name / point / description は必須です。");
+      return;
+    }
+
+    const parsedPoint = Number(trimmedPoint);
+    if (!Number.isFinite(parsedPoint)) {
+      setError("point は数値で入力してください。");
       return;
     }
 
@@ -40,87 +54,85 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
         return;
       }
 
-      const candidates: Array<{ url: string; body: Record<string, unknown> }> =
-        [
-          {
-            url: `${v1Base}/groups/${encodeURIComponent(groupId)}/tasks`,
-            body: {
-              task: {
-                title: trimmed,
-              },
-            },
+      const endpoint = `${v1Base}/groups/${encodeURIComponent(groupId)}/tasks`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          task: {
+            name: trimmedName,
+            point: parsedPoint,
+            description: trimmedDescription,
           },
-          {
-            url: `${base}/groups/${encodeURIComponent(groupId)}/tasks`,
-            body: {
-              task: {
-                title: trimmed,
-              },
-            },
-          },
-          {
-            url: `${v1Base}/tasks`,
-            body: {
-              task: {
-                title: trimmed,
-                group_id: groupId,
-              },
-            },
-          },
-          {
-            url: `${base}/tasks`,
-            body: {
-              task: {
-                title: trimmed,
-                group_id: groupId,
-              },
-            },
-          },
-        ];
+        }),
+      }).catch(() => null);
 
-      let lastMessage = "タスク作成に失敗しました。";
-
-      for (const candidate of candidates) {
-        const res = await fetch(candidate.url, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(candidate.body),
-        }).catch(() => null);
-
-        if (!res) {
-          continue;
-        }
-
-        if (res.ok) {
-          router.refresh();
-          return;
-        }
-
-        const data = await res.json().catch(() => null);
-        lastMessage =
-          (data as { error?: string; message?: string } | null)?.error ??
-          (data as { error?: string; message?: string } | null)?.message ??
-          `タスク作成に失敗しました。(status: ${res.status})`;
+      if (!res) {
+        setError("タスク作成に失敗しました。");
+        return;
       }
+
+      if (res.ok) {
+        setName("");
+        setPoint("");
+        setDescription("");
+        router.refresh();
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+      const lastMessage =
+        (data as { error?: string; message?: string } | null)?.error ??
+        (data as { error?: string; message?: string } | null)?.message ??
+        `タスク作成に失敗しました。(status: ${res.status})`;
 
       setError(lastMessage);
     });
   };
 
   return (
-    <div className="space-y-1">
+    <form
+      onSubmit={onCreate}
+      className="w-full space-y-2 rounded-md border p-3"
+    >
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="name"
+          required
+          disabled={isPending || !groupId}
+          className="rounded-md border bg-background px-2 py-1 text-sm"
+        />
+        <input
+          type="number"
+          value={point}
+          onChange={(e) => setPoint(e.target.value)}
+          placeholder="point"
+          required
+          disabled={isPending || !groupId}
+          className="rounded-md border bg-background px-2 py-1 text-sm"
+        />
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="description"
+          required
+          disabled={isPending || !groupId}
+          className="rounded-md border bg-background px-2 py-1 text-sm"
+        />
+      </div>
       <button
-        type="button"
-        onClick={onCreate}
+        type="submit"
         disabled={isPending || !groupId}
         className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        タスクを作成
+        タスクを登録
       </button>
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
-    </div>
+    </form>
   );
 }

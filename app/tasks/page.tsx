@@ -12,10 +12,11 @@ type GroupItem = {
 
 type TaskItem = {
   id?: string;
-  title: string;
-  assigneeName?: string;
-  status?: string;
-  dueDate?: string;
+  name: string;
+  point?: string;
+  description?: string;
+  createdAt?: string;
+  sourceIndex: number;
 };
 
 const asRecord = (value: unknown): AnyRecord | null => {
@@ -45,6 +46,15 @@ const pickFirstString = (
 
   return undefined;
 };
+
+const unwrapEntity = (value: AnyRecord | null) =>
+  asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
+
+const pickFromSources = (
+  sourceA: AnyRecord | null,
+  sourceB: AnyRecord | null,
+  keys: string[],
+) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
 
 const firstArray = (...values: unknown[]): unknown[] => {
   for (const value of values) {
@@ -149,19 +159,30 @@ const extractTasksArray = (payload: unknown): unknown[] => {
 
 const normalizeTask = (row: unknown, index: number): TaskItem => {
   const root = asRecord(row);
-  const task = asRecord(root?.task) ?? root;
-  const assignee = asRecord(task?.assignee) ?? asRecord(task?.user);
+  const taskRoot = asRecord(root?.task) ?? root;
+  const task = unwrapEntity(taskRoot);
 
-  const title =
-    pickFirstString(task, ["title", "name", "task_name", "content"]) ??
-    `タスク ${index + 1}`;
+  const name =
+    pickFromSources(task, taskRoot, [
+      "name",
+      "title",
+      "task_name",
+      "content",
+    ]) ?? `タスク ${index + 1}`;
 
   return {
-    id: pickFirstString(task, ["id", "task_id", "taskId"]),
-    title,
-    assigneeName: pickFirstString(assignee, ["name", "display_name"]),
-    status: pickFirstString(task, ["status", "state"]),
-    dueDate: pickFirstString(task, ["due_date", "dueDate", "deadline"]),
+    id:
+      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
+      pickFirstString(root, ["id", "task_id", "taskId"]),
+    name,
+    point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
+    description: pickFromSources(task, taskRoot, [
+      "description",
+      "detail",
+      "memo",
+    ]),
+    createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
+    sourceIndex: index,
   };
 };
 
@@ -253,7 +274,22 @@ export default async function TasksPage() {
         }
       }
 
-      const tasks = extractTasksArray(payload).map(normalizeTask);
+      const tasks = extractTasksArray(payload)
+        .map(normalizeTask)
+        .sort((a, b) => {
+          const aTime = a.createdAt ? Date.parse(a.createdAt) : Number.NaN;
+          const bTime = b.createdAt ? Date.parse(b.createdAt) : Number.NaN;
+
+          const aValid = Number.isFinite(aTime);
+          const bValid = Number.isFinite(bTime);
+
+          if (aValid && bValid && aTime !== bTime) {
+            return aTime - bTime;
+          }
+
+          return a.sourceIndex - b.sourceIndex;
+        });
+
       return { group, tasks };
     }),
   );
@@ -274,8 +310,11 @@ export default async function TasksPage() {
                 <span className="text-sm text-slate-500">
                   {tasks.length} 件
                 </span>
-                <GroupTaskCreateButton groupId={group.id} apiUrl={apiUrl} />
               </div>
+            </div>
+
+            <div className="mb-4">
+              <GroupTaskCreateButton groupId={group.id} apiUrl={apiUrl} />
             </div>
 
             {tasks.length === 0 ? (
@@ -283,23 +322,33 @@ export default async function TasksPage() {
                 このグループのタスクはまだありません。
               </p>
             ) : (
-              <ul className="space-y-2">
-                {tasks.map((task, index) => (
-                  <li
-                    key={task.id ?? `${group.id ?? group.name}-${index}`}
-                    className="rounded-md border bg-card px-3 py-2"
-                  >
-                    <p className="font-medium">{task.title}</p>
-                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                      {task.assigneeName ? (
-                        <span>担当: {task.assigneeName}</span>
-                      ) : null}
-                      {task.status ? <span>状態: {task.status}</span> : null}
-                      {task.dueDate ? <span>期限: {task.dueDate}</span> : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <div className="overflow-x-auto rounded-md border">
+                <table className="min-w-full border-collapse text-sm">
+                  <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">name</th>
+                      <th className="px-3 py-2 font-semibold">point</th>
+                      <th className="px-3 py-2 font-semibold">description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tasks.map((task, index) => (
+                      <tr
+                        key={task.id ?? `${group.id ?? group.name}-${index}`}
+                        className="border-t"
+                      >
+                        <td className="px-3 py-2 font-medium">{task.name}</td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                          {task.point ?? "-"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                          {task.description ?? "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
         ))}
