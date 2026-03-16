@@ -264,17 +264,24 @@ export default async function TasksPage() {
 
       <div className="space-y-5">
         {groupsWithTasks.map(({ group, tasks }) => (
-          <section key={group.id ?? group.name} className="rounded-lg border p-5">
+          <section
+            key={group.id ?? group.name}
+            className="rounded-lg border p-5"
+          >
             <div className="mb-3 flex items-start justify-between gap-3">
               <h2 className="text-lg font-bold">{group.name}</h2>
               <div className="flex flex-col items-end gap-2">
-                <span className="text-sm text-slate-500">{tasks.length} 件</span>
+                <span className="text-sm text-slate-500">
+                  {tasks.length} 件
+                </span>
                 <GroupTaskCreateButton groupId={group.id} apiUrl={apiUrl} />
               </div>
             </div>
 
             {tasks.length === 0 ? (
-              <p className="text-sm text-slate-500">このグループのタスクはまだありません。</p>
+              <p className="text-sm text-slate-500">
+                このグループのタスクはまだありません。
+              </p>
             ) : (
               <ul className="space-y-2">
                 {tasks.map((task, index) => (
@@ -284,7 +291,9 @@ export default async function TasksPage() {
                   >
                     <p className="font-medium">{task.title}</p>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                      {task.assigneeName ? <span>担当: {task.assigneeName}</span> : null}
+                      {task.assigneeName ? (
+                        <span>担当: {task.assigneeName}</span>
+                      ) : null}
                       {task.status ? <span>状態: {task.status}</span> : null}
                       {task.dueDate ? <span>期限: {task.dueDate}</span> : null}
                     </div>

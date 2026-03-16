@@ -30,7 +30,8 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
     startTransition(async () => {
       setError(null);
 
-      const token = (session?.user as { idToken?: string } | undefined)?.idToken;
+      const token = (session?.user as { idToken?: string } | undefined)
+        ?.idToken;
       const base = apiUrl?.replace(/\/+$/, "");
       const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
@@ -39,42 +40,43 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
         return;
       }
 
-      const candidates: Array<{ url: string; body: Record<string, unknown> }> = [
-        {
-          url: `${v1Base}/groups/${encodeURIComponent(groupId)}/tasks`,
-          body: {
-            task: {
-              title: trimmed,
+      const candidates: Array<{ url: string; body: Record<string, unknown> }> =
+        [
+          {
+            url: `${v1Base}/groups/${encodeURIComponent(groupId)}/tasks`,
+            body: {
+              task: {
+                title: trimmed,
+              },
             },
           },
-        },
-        {
-          url: `${base}/groups/${encodeURIComponent(groupId)}/tasks`,
-          body: {
-            task: {
-              title: trimmed,
+          {
+            url: `${base}/groups/${encodeURIComponent(groupId)}/tasks`,
+            body: {
+              task: {
+                title: trimmed,
+              },
             },
           },
-        },
-        {
-          url: `${v1Base}/tasks`,
-          body: {
-            task: {
-              title: trimmed,
-              group_id: groupId,
+          {
+            url: `${v1Base}/tasks`,
+            body: {
+              task: {
+                title: trimmed,
+                group_id: groupId,
+              },
             },
           },
-        },
-        {
-          url: `${base}/tasks`,
-          body: {
-            task: {
-              title: trimmed,
-              group_id: groupId,
+          {
+            url: `${base}/tasks`,
+            body: {
+              task: {
+                title: trimmed,
+                group_id: groupId,
+              },
             },
           },
-        },
-      ];
+        ];
 
       let lastMessage = "タスク作成に失敗しました。";
 
