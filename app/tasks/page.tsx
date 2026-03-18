@@ -238,17 +238,21 @@ export default async function TasksPage() {
 
   if (groups.length === 0) {
     return (
-      <div className="space-y-4 p-6">
-        <h1 className="text-2xl font-extrabold">タスク一覧</h1>
-        <p className="text-slate-600 dark:text-slate-300">
-          参加中のグループがありません。
-        </p>
-        <Link
-          href="/groups/empty"
-          className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-        >
-          グループを追加する
-        </Link>
+      <div className="prose max-w-none p-6">
+        <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
+          タスク一覧
+        </h1>
+        <div className="not-prose mt-8 space-y-4">
+          <p className="text-slate-600 dark:text-slate-300">
+            参加中のグループがありません。
+          </p>
+          <Link
+            href="/groups/empty"
+            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            グループを追加する
+          </Link>
+        </div>
       </div>
     );
   }
@@ -296,13 +300,12 @@ export default async function TasksPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="rounded-xl border bg-white p-5 shadow-sm dark:bg-slate-950">
-        <h1 className="text-2xl font-extrabold">タスク一覧</h1>
-        <p className="mt-1 text-sm text-slate-500">グループごとのタスク一覧</p>
-      </div>
+    <div className="prose max-w-none p-6">
+      <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
+        タスク一覧
+      </h1>
 
-      <div className="space-y-5">
+      <div className="not-prose mt-8 space-y-5">
         {groupsWithTasks.map(({ group, tasks }) => (
           <section
             key={group.id ?? group.name}

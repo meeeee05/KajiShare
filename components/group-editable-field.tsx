@@ -275,24 +275,24 @@ export default function GroupEditableField({
     );
   }
 
+  const resolvedDisplayValue =
+    displayValue ||
+    (field === "assign_mode" || field === "balance_type"
+      ? "選択してください"
+      : "-");
+
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
       {linkHref ? (
         <Link
           href={linkHref}
-          className={`${textClassName ?? ""} min-w-0 break-all text-blue-600 hover:underline`}
+          className={`${textClassName ?? ""} min-w-0 break-all text-black hover:underline`}
         >
-          {displayValue ||
-            (field === "assign_mode" || field === "balance_type"
-              ? "選択してください"
-              : "-")}
+          {resolvedDisplayValue}
         </Link>
       ) : (
         <span className={`${textClassName ?? ""} min-w-0 break-all`}>
-          {displayValue ||
-            (field === "assign_mode" || field === "balance_type"
-              ? "選択してください"
-              : "-")}
+          {resolvedDisplayValue}
         </span>
       )}
       <button

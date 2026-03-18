@@ -63,7 +63,7 @@ export function MainNav({
                   " text-base md:text-lg font-bold"
                 }
               >
-                いままでの実績
+                担当のタスク
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
