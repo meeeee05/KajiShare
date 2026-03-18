@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import GroupTaskCreateButton from "@/components/group-task-create-button";
+import TaskDeleteButton from "@/components/task-delete-button";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -296,21 +297,22 @@ export default async function TasksPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-extrabold">タスク一覧</h1>
+      <div className="rounded-xl border bg-white p-5 shadow-sm dark:bg-slate-950">
+        <h1 className="text-2xl font-extrabold">タスク一覧</h1>
+        <p className="mt-1 text-sm text-slate-500">グループごとのタスク一覧</p>
+      </div>
 
       <div className="space-y-5">
         {groupsWithTasks.map(({ group, tasks }) => (
           <section
             key={group.id ?? group.name}
-            className="rounded-lg border p-5"
+            className="rounded-xl border bg-white p-5 shadow-sm dark:bg-slate-950"
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <h2 className="text-lg font-bold">{group.name}</h2>
-              <div className="flex flex-col items-end gap-2">
-                <span className="text-sm text-slate-500">
-                  {tasks.length} 件
-                </span>
-              </div>
+            <div className="mb-4 flex items-center justify-between gap-3 border-b pb-3">
+              <h2 className="text-lg font-bold tracking-tight">{group.name}</h2>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                {tasks.length} 件
+              </span>
             </div>
 
             <div className="mb-4">
@@ -329,13 +331,16 @@ export default async function TasksPage() {
                       <th className="px-3 py-2 font-semibold">name</th>
                       <th className="px-3 py-2 font-semibold">point</th>
                       <th className="px-3 py-2 font-semibold">description</th>
+                      <th className="px-3 py-2 text-right font-semibold">
+                        操作
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {tasks.map((task, index) => (
                       <tr
                         key={task.id ?? `${group.id ?? group.name}-${index}`}
-                        className="border-t"
+                        className="border-t align-top"
                       >
                         <td className="px-3 py-2 font-medium">{task.name}</td>
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
@@ -343,6 +348,13 @@ export default async function TasksPage() {
                         </td>
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
                           {task.description ?? "-"}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <TaskDeleteButton
+                            taskId={task.id}
+                            groupId={group.id}
+                            apiUrl={apiUrl}
+                          />
                         </td>
                       </tr>
                     ))}
