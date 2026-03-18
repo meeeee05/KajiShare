@@ -461,6 +461,7 @@ export default async function GroupsPage() {
               value={group.name}
               textClassName="text-lg font-bold"
               inputClassName="text-base"
+              linkHref="/tasks"
             />
 
             <div className="mt-4 space-y-3">

@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Pencil } from "lucide-react";
+import Link from "next/link";
 
 type EditableField = "name" | "assign_mode" | "balance_type";
 
@@ -15,6 +16,7 @@ type Props = {
   value?: string;
   textClassName?: string;
   inputClassName?: string;
+  linkHref?: string;
 };
 
 const fieldLabelMap: Record<EditableField, string> = {
@@ -93,6 +95,7 @@ export default function GroupEditableField({
   value,
   textClassName,
   inputClassName,
+  linkHref,
 }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -274,12 +277,24 @@ export default function GroupEditableField({
 
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
-      <span className={`${textClassName ?? ""} min-w-0 break-all`}>
-        {displayValue ||
-          (field === "assign_mode" || field === "balance_type"
-            ? "選択してください"
-            : "-")}
-      </span>
+      {linkHref ? (
+        <Link
+          href={linkHref}
+          className={`${textClassName ?? ""} min-w-0 break-all text-blue-600 hover:underline`}
+        >
+          {displayValue ||
+            (field === "assign_mode" || field === "balance_type"
+              ? "選択してください"
+              : "-")}
+        </Link>
+      ) : (
+        <span className={`${textClassName ?? ""} min-w-0 break-all`}>
+          {displayValue ||
+            (field === "assign_mode" || field === "balance_type"
+              ? "選択してください"
+              : "-")}
+        </span>
+      )}
       <button
         type="button"
         onClick={onStartEdit}
