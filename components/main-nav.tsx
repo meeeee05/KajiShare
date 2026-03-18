@@ -66,18 +66,6 @@ export function MainNav({
                 担当のタスク
               </NavigationMenuLink>
             </NavigationMenuItem>
-            <NavigationMenuItem>
-              <NavigationMenuLink
-                href="#"
-                onClick={(event) => event.preventDefault()}
-                className={
-                  navigationMenuTriggerStyle() +
-                  " text-base md:text-lg font-bold cursor-default"
-                }
-              >
-                グループ切替え
-              </NavigationMenuLink>
-            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
       )}
