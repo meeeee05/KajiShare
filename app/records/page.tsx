@@ -175,11 +175,11 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
       const root = asRecord(row);
       const source = asRecord(root?.group) ?? root;
       const group = unwrapEntity(source);
-      const base = unwrapEntity(root);
+      const baseObj = unwrapEntity(root);
 
-      const id = pickFromSources(group, base, ["id", "group_id", "groupId"]);
+      const id = pickFromSources(group, baseObj, ["id", "group_id", "groupId"]);
       const name =
-        pickFromSources(group, base, ["name"]) ??
+        pickFromSources(group, baseObj, ["name"]) ??
         pickFromSources(source, root, ["name"]);
 
       if (!name) {
@@ -187,10 +187,10 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
       }
 
       const assignMode = normalizeAssignMode(
-        pickFromSources(group, base, ["assign_mode"]),
+        pickFromSources(group, baseObj, ["assign_mode"]),
       );
       const balanceType = normalizeBalanceType(
-        pickFromSources(group, base, ["balance_type"]),
+        pickFromSources(group, baseObj, ["balance_type"]),
       );
 
       put({
@@ -274,12 +274,8 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
             "member_id",
             "user_id",
             "userId",
-          ]) ??
-          pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
-        name: pickFromSources(candidateMember, membership, [
-          "name",
-          "member_name",
-        ]),
+          ]) ?? pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
+        name: pickFromSources(candidateMember, membership, ["name", "member_name"]),
         email: pickFromSources(candidateMember, membership, [
           "email",
           "mail",
@@ -287,10 +283,7 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
         ]),
       };
 
-      normalized.push({
-        groupId,
-        member,
-      });
+      normalized.push({ groupId, member });
     }
   }
 
@@ -334,12 +327,8 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
   const task = unwrapEntity(taskRoot);
 
   const name =
-    pickFromSources(task, taskRoot, [
-      "name",
-      "title",
-      "task_name",
-      "content",
-    ]) ?? `タスク ${index + 1}`;
+    pickFromSources(task, taskRoot, ["name", "title", "task_name", "content"]) ??
+    `タスク ${index + 1}`;
 
   return {
     id:
@@ -347,11 +336,7 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
       pickFirstString(root, ["id", "task_id", "taskId"]),
     name,
     point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    description: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
+    description: pickFromSources(task, taskRoot, ["description", "detail", "memo"]),
     createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
     sourceIndex: index,
   };
@@ -447,32 +432,17 @@ const uniqueMembers = (members: MemberItem[]) => {
   return result;
 };
 
-const buildRoundRobinOrder = (counts: number[]) => {
-  const remain = [...counts];
-  const order: number[] = [];
-
-  while (true) {
-    let pushed = false;
-
-    for (let index = 0; index < remain.length; index += 1) {
-      if (remain[index] > 0) {
-        order.push(index);
-        remain[index] -= 1;
-        pushed = true;
-      }
-    }
-
-    if (!pushed) {
-      break;
-    }
+const taskPointValue = (task: TaskItem) => {
+  const parsed = Number(task.point);
+  if (!Number.isFinite(parsed)) {
+    return 0;
   }
-
-  return order;
+  return Math.max(0, parsed);
 };
 
-const calculateBalancedCounts = (
+const assignTasksBalancedByPoints = (
+  tasks: TaskItem[],
   memberCount: number,
-  taskCount: number,
   currentUserIndex: number,
   balanceType: "more" | "less" | "",
 ) => {
@@ -480,83 +450,140 @@ const calculateBalancedCounts = (
     return [] as number[];
   }
 
-  const counts = new Array(memberCount).fill(0);
-  const base = Math.floor(taskCount / memberCount);
-  const remainder = taskCount % memberCount;
+  const assignment = new Array<number>(tasks.length).fill(0);
+  const totals = new Array<number>(memberCount).fill(0);
+  const buckets: number[][] = new Array(memberCount)
+    .fill(null)
+    .map(() => [] as number[]);
 
-  for (let index = 0; index < memberCount; index += 1) {
-    counts[index] = base + (index < remainder ? 1 : 0);
+  const sortedTaskIndices = Array.from({ length: tasks.length }, (_, i) => i).sort(
+    (a, b) => {
+      const diff = taskPointValue(tasks[b]) - taskPointValue(tasks[a]);
+      if (diff !== 0) {
+        return diff;
+      }
+      return tasks[a].sourceIndex - tasks[b].sourceIndex;
+    },
+  );
+
+  for (const taskIndex of sortedTaskIndices) {
+    let assigneeIndex = 0;
+
+    for (let memberIndex = 1; memberIndex < memberCount; memberIndex += 1) {
+      const betterTotal = totals[memberIndex] < totals[assigneeIndex];
+      const tieTotal = totals[memberIndex] === totals[assigneeIndex];
+      const betterCount = tieTotal && buckets[memberIndex].length < buckets[assigneeIndex].length;
+
+      if (betterTotal || betterCount) {
+        assigneeIndex = memberIndex;
+      }
+    }
+
+    assignment[taskIndex] = assigneeIndex;
+    buckets[assigneeIndex].push(taskIndex);
+    totals[assigneeIndex] += taskPointValue(tasks[taskIndex]);
   }
 
   if (
     memberCount === 1 ||
     currentUserIndex < 0 ||
-    currentUserIndex >= memberCount
+    currentUserIndex >= memberCount ||
+    balanceType === ""
   ) {
-    return counts;
+    return assignment;
   }
 
-  if (balanceType === "more") {
-    while (true) {
-      const maxOther = counts.reduce((max, count, index) => {
+  const epsilon = 1e-9;
+  const relationSatisfied = () => {
+    const current = totals[currentUserIndex];
+    if (balanceType === "more") {
+      const maxOther = totals.reduce((max, value, index) => {
         if (index === currentUserIndex) {
           return max;
         }
-        return Math.max(max, count);
+        return Math.max(max, value);
       }, -Infinity);
+      return current > maxOther + epsilon;
+    }
 
-      if (counts[currentUserIndex] > maxOther) {
-        break;
+    const minOther = totals.reduce((min, value, index) => {
+      if (index === currentUserIndex) {
+        return min;
       }
+      return Math.min(min, value);
+    }, Infinity);
+    return current + epsilon < minOther;
+  };
 
+  const moveTask = (taskIndex: number, fromIndex: number, toIndex: number) => {
+    const fromBucket = buckets[fromIndex];
+    const at = fromBucket.indexOf(taskIndex);
+    if (at < 0) {
+      return false;
+    }
+
+    fromBucket.splice(at, 1);
+    buckets[toIndex].push(taskIndex);
+    assignment[taskIndex] = toIndex;
+
+    const point = taskPointValue(tasks[taskIndex]);
+    totals[fromIndex] -= point;
+    totals[toIndex] += point;
+    return true;
+  };
+
+  let guard = tasks.length * memberCount * 4;
+
+  while (!relationSatisfied() && guard > 0) {
+    guard -= 1;
+
+    if (balanceType === "more") {
       let donorIndex = -1;
-      let donorCount = -1;
 
-      for (let index = 0; index < counts.length; index += 1) {
+      for (let index = 0; index < memberCount; index += 1) {
         if (index === currentUserIndex) {
           continue;
         }
-        if (counts[index] > donorCount) {
-          donorCount = counts[index];
+        if (
+          donorIndex < 0 ||
+          totals[index] > totals[donorIndex] ||
+          (totals[index] === totals[donorIndex] && buckets[index].length > buckets[donorIndex].length)
+        ) {
           donorIndex = index;
         }
       }
 
-      if (donorIndex < 0 || counts[donorIndex] <= 0) {
+      if (donorIndex < 0 || buckets[donorIndex].length === 0) {
         break;
       }
 
-      counts[donorIndex] -= 1;
-      counts[currentUserIndex] += 1;
-    }
-  }
+      const candidate = [...buckets[donorIndex]].sort(
+        (a, b) => taskPointValue(tasks[b]) - taskPointValue(tasks[a]),
+      )[0];
 
-  if (balanceType === "less") {
-    while (true) {
-      const minOther = counts.reduce((min, count, index) => {
-        if (index === currentUserIndex) {
-          return min;
-        }
-        return Math.min(min, count);
-      }, Infinity);
-
-      if (counts[currentUserIndex] < minOther) {
+      if (candidate === undefined || taskPointValue(tasks[candidate]) <= 0) {
         break;
       }
 
-      if (counts[currentUserIndex] <= 0) {
+      if (!moveTask(candidate, donorIndex, currentUserIndex)) {
+        break;
+      }
+    } else {
+      if (buckets[currentUserIndex].length === 0) {
         break;
       }
 
       let recipientIndex = -1;
-      let recipientCount = Infinity;
 
-      for (let index = 0; index < counts.length; index += 1) {
+      for (let index = 0; index < memberCount; index += 1) {
         if (index === currentUserIndex) {
           continue;
         }
-        if (counts[index] < recipientCount) {
-          recipientCount = counts[index];
+        if (
+          recipientIndex < 0 ||
+          totals[index] < totals[recipientIndex] ||
+          (totals[index] === totals[recipientIndex] && buckets[index].length < buckets[recipientIndex].length)
+        ) {
           recipientIndex = index;
         }
       }
@@ -565,12 +592,21 @@ const calculateBalancedCounts = (
         break;
       }
 
-      counts[currentUserIndex] -= 1;
-      counts[recipientIndex] += 1;
+      const candidate = [...buckets[currentUserIndex]].sort(
+        (a, b) => taskPointValue(tasks[b]) - taskPointValue(tasks[a]),
+      )[0];
+
+      if (candidate === undefined || taskPointValue(tasks[candidate]) <= 0) {
+        break;
+      }
+
+      if (!moveTask(candidate, currentUserIndex, recipientIndex)) {
+        break;
+      }
     }
   }
 
-  return counts;
+  return assignment;
 };
 
 const assignmentModeLabel = (mode: GroupItem["assignMode"]) => {
@@ -686,9 +722,7 @@ export default async function RecordsPage() {
             if (!group.id) {
               return false;
             }
-            return (
-              normalizeText(membership.groupId) === normalizeText(group.id)
-            );
+            return normalizeText(membership.groupId) === normalizeText(group.id);
           })
           .map((membership) => membership.member),
       );
@@ -757,20 +791,15 @@ export default async function RecordsPage() {
       const assignedToCurrent: TaskItem[] = [];
 
       if (group.assignMode === "balanced") {
-        const counts = calculateBalancedCounts(
+        const assigneeByTaskIndex = assignTasksBalancedByPoints(
+          tasksForAssign,
           membersForAssign.length,
-          tasksForAssign.length,
           currentUserIndex,
           group.balanceType,
         );
-        const assigneeOrder = buildRoundRobinOrder(counts);
 
-        for (
-          let taskIndex = 0;
-          taskIndex < tasksForAssign.length && taskIndex < assigneeOrder.length;
-          taskIndex += 1
-        ) {
-          if (assigneeOrder[taskIndex] === currentUserIndex) {
+        for (let taskIndex = 0; taskIndex < tasksForAssign.length; taskIndex += 1) {
+          if (assigneeByTaskIndex[taskIndex] === currentUserIndex) {
             assignedToCurrent.push(tasksForAssign[taskIndex]);
           }
         }
@@ -826,9 +855,7 @@ export default async function RecordsPage() {
             </div>
 
             {assignedTasks.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                本日の担当タスクはありません。
-              </p>
+              <p className="text-sm text-slate-500">本日の担当タスクはありません。</p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
                 <table className="min-w-full border-collapse text-sm">
