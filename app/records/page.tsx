@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import AssignmentStatusButton from "@/components/assignment-status-button";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -28,7 +29,20 @@ type TaskItem = {
   point?: string;
   description?: string;
   createdAt?: string;
+  assignmentId?: string;
+  assignmentStatus?: string;
   sourceIndex: number;
+};
+
+type AssignmentItem = {
+  id?: string;
+  taskId?: string;
+  status?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  assigneeEmail?: string;
+  targetDate?: string;
+  updatedAt?: string;
 };
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -274,8 +288,12 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
             "member_id",
             "user_id",
             "userId",
-          ]) ?? pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
-        name: pickFromSources(candidateMember, membership, ["name", "member_name"]),
+          ]) ??
+          pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
+        name: pickFromSources(candidateMember, membership, [
+          "name",
+          "member_name",
+        ]),
         email: pickFromSources(candidateMember, membership, [
           "email",
           "mail",
@@ -325,10 +343,16 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
   const root = asRecord(row);
   const taskRoot = asRecord(root?.task) ?? root;
   const task = unwrapEntity(taskRoot);
+  const assignmentRoot = asRecord(root?.assignment);
+  const assignment = unwrapEntity(assignmentRoot);
 
   const name =
-    pickFromSources(task, taskRoot, ["name", "title", "task_name", "content"]) ??
-    `タスク ${index + 1}`;
+    pickFromSources(task, taskRoot, [
+      "name",
+      "title",
+      "task_name",
+      "content",
+    ]) ?? `タスク ${index + 1}`;
 
   return {
     id:
@@ -336,9 +360,162 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
       pickFirstString(root, ["id", "task_id", "taskId"]),
     name,
     point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    description: pickFromSources(task, taskRoot, ["description", "detail", "memo"]),
+    description: pickFromSources(task, taskRoot, [
+      "description",
+      "detail",
+      "memo",
+    ]),
     createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
+    assignmentId: pickFromSources(assignment, assignmentRoot, [
+      "id",
+      "assignment_id",
+      "assignmentId",
+    ]),
+    assignmentStatus: pickFromSources(assignment, assignmentRoot, [
+      "status",
+      "state",
+    ]),
     sourceIndex: index,
+  };
+};
+
+const extractAssignmentsArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const rootData = asRecord(root.data);
+  const rootDataData = asRecord(rootData?.data);
+
+  return firstArray(
+    root.assignments,
+    root.items,
+    root.results,
+    root.data,
+    rootData?.assignments,
+    rootData?.items,
+    rootData?.results,
+    rootData?.data,
+    rootDataData?.assignments,
+    rootDataData?.items,
+    rootDataData?.results,
+  );
+};
+
+const normalizeAssignment = (row: unknown): AssignmentItem => {
+  const root = asRecord(row);
+  const assignmentRoot = asRecord(root?.assignment) ?? root;
+  const assignment = unwrapEntity(assignmentRoot);
+
+  const assigneeRoot =
+    asRecord(assignmentRoot?.assignee) ??
+    asRecord(assignmentRoot?.user) ??
+    asRecord(assignment?.assignee) ??
+    asRecord(assignment?.user);
+  const assignee = unwrapEntity(assigneeRoot);
+
+  return {
+    id: pickFromSources(assignment, assignmentRoot, [
+      "id",
+      "assignment_id",
+      "assignmentId",
+    ]),
+    taskId:
+      pickFromSources(assignment, assignmentRoot, ["task_id", "taskId"]) ??
+      pickFirstString(root, ["task_id", "taskId"]),
+    status: pickFromSources(assignment, assignmentRoot, ["status", "state"]),
+    assigneeId:
+      pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
+      pickFromSources(assigneeRoot, assignmentRoot, ["assignee_id", "member_id"]),
+    assigneeName: pickFromSources(assignee, assignment, ["name", "user_name"]),
+    assigneeEmail: pickFromSources(assignee, assignment, ["email", "mail"]),
+    targetDate: pickFromSources(assignment, assignmentRoot, [
+      "date",
+      "target_date",
+      "assigned_date",
+      "work_date",
+    ]),
+    updatedAt: pickFromSources(assignment, assignmentRoot, [
+      "updated_at",
+      "updatedAt",
+      "created_at",
+      "createdAt",
+    ]),
+  };
+};
+
+const isSameDay = (isoLike?: string, ymd?: string) => {
+  if (!isoLike || !ymd) {
+    return false;
+  }
+  return isoLike.slice(0, 10) === ymd;
+};
+
+const assignmentBelongsToCurrentUser = (
+  assignment: AssignmentItem,
+  currentUser: MemberItem,
+) => {
+  const assignmentUser: MemberItem = {
+    id: assignment.assigneeId,
+    name: assignment.assigneeName,
+    email: assignment.assigneeEmail,
+  };
+
+  return isSameMember(assignmentUser, currentUser);
+};
+
+const mergeAssignmentToTask = (
+  task: TaskItem,
+  assignments: AssignmentItem[],
+  currentUser: MemberItem,
+  todayKey: string,
+) => {
+  const taskIdNormalized = normalizeText(task.id);
+  if (!taskIdNormalized) {
+    return task;
+  }
+
+  const candidates = assignments.filter((assignment) => {
+    return (
+      normalizeText(assignment.taskId) === taskIdNormalized &&
+      assignmentBelongsToCurrentUser(assignment, currentUser)
+    );
+  });
+
+  if (candidates.length === 0) {
+    return task;
+  }
+
+  const sorted = [...candidates].sort((a, b) => {
+    const aToday = isSameDay(a.targetDate, todayKey) ? 1 : 0;
+    const bToday = isSameDay(b.targetDate, todayKey) ? 1 : 0;
+    if (aToday !== bToday) {
+      return bToday - aToday;
+    }
+
+    const aTime = a.updatedAt ? Date.parse(a.updatedAt) : Number.NaN;
+    const bTime = b.updatedAt ? Date.parse(b.updatedAt) : Number.NaN;
+    const aValid = Number.isFinite(aTime);
+    const bValid = Number.isFinite(bTime);
+
+    if (aValid && bValid && aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    return 0;
+  });
+
+  const latest = sorted[0];
+
+  return {
+    ...task,
+    assignmentId: latest.id ?? task.assignmentId,
+    assignmentStatus: latest.status ?? task.assignmentStatus,
   };
 };
 
@@ -456,15 +633,16 @@ const assignTasksBalancedByPoints = (
     .fill(null)
     .map(() => [] as number[]);
 
-  const sortedTaskIndices = Array.from({ length: tasks.length }, (_, i) => i).sort(
-    (a, b) => {
-      const diff = taskPointValue(tasks[b]) - taskPointValue(tasks[a]);
-      if (diff !== 0) {
-        return diff;
-      }
-      return tasks[a].sourceIndex - tasks[b].sourceIndex;
-    },
-  );
+  const sortedTaskIndices = Array.from(
+    { length: tasks.length },
+    (_, i) => i,
+  ).sort((a, b) => {
+    const diff = taskPointValue(tasks[b]) - taskPointValue(tasks[a]);
+    if (diff !== 0) {
+      return diff;
+    }
+    return tasks[a].sourceIndex - tasks[b].sourceIndex;
+  });
 
   for (const taskIndex of sortedTaskIndices) {
     let assigneeIndex = 0;
@@ -472,7 +650,8 @@ const assignTasksBalancedByPoints = (
     for (let memberIndex = 1; memberIndex < memberCount; memberIndex += 1) {
       const betterTotal = totals[memberIndex] < totals[assigneeIndex];
       const tieTotal = totals[memberIndex] === totals[assigneeIndex];
-      const betterCount = tieTotal && buckets[memberIndex].length < buckets[assigneeIndex].length;
+      const betterCount =
+        tieTotal && buckets[memberIndex].length < buckets[assigneeIndex].length;
 
       if (betterTotal || betterCount) {
         assigneeIndex = memberIndex;
@@ -547,7 +726,8 @@ const assignTasksBalancedByPoints = (
         if (
           donorIndex < 0 ||
           totals[index] > totals[donorIndex] ||
-          (totals[index] === totals[donorIndex] && buckets[index].length > buckets[donorIndex].length)
+          (totals[index] === totals[donorIndex] &&
+            buckets[index].length > buckets[donorIndex].length)
         ) {
           donorIndex = index;
         }
@@ -582,7 +762,8 @@ const assignTasksBalancedByPoints = (
         if (
           recipientIndex < 0 ||
           totals[index] < totals[recipientIndex] ||
-          (totals[index] === totals[recipientIndex] && buckets[index].length < buckets[recipientIndex].length)
+          (totals[index] === totals[recipientIndex] &&
+            buckets[index].length < buckets[recipientIndex].length)
         ) {
           recipientIndex = index;
         }
@@ -722,7 +903,9 @@ export default async function RecordsPage() {
             if (!group.id) {
               return false;
             }
-            return normalizeText(membership.groupId) === normalizeText(group.id);
+            return (
+              normalizeText(membership.groupId) === normalizeText(group.id)
+            );
           })
           .map((membership) => membership.member),
       );
@@ -747,6 +930,13 @@ export default async function RecordsPage() {
         `${base}/tasks?group_id=${encodeURIComponent(group.id)}`,
       ];
 
+      const assignmentCandidates = [
+        `${v1Base}/groups/${encodeURIComponent(group.id)}/assignments`,
+        `${base}/groups/${encodeURIComponent(group.id)}/assignments`,
+        `${v1Base}/assignments?group_id=${encodeURIComponent(group.id)}`,
+        `${base}/assignments?group_id=${encodeURIComponent(group.id)}`,
+      ];
+
       let tasksPayload: unknown | null = null;
       for (const url of taskCandidates) {
         const data = await fetchOkJson(url);
@@ -755,6 +945,19 @@ export default async function RecordsPage() {
           break;
         }
       }
+
+      let assignmentsPayload: unknown | null = null;
+      for (const url of assignmentCandidates) {
+        const data = await fetchOkJson(url);
+        if (data != null) {
+          assignmentsPayload = data;
+          break;
+        }
+      }
+
+      const assignments = extractAssignmentsArray(assignmentsPayload).map(
+        normalizeAssignment,
+      );
 
       const tasks = sortTasksForAssignment(
         extractTasksArray(tasksPayload).map(normalizeTask),
@@ -784,6 +987,10 @@ export default async function RecordsPage() {
             )
           : tasks;
 
+      const tasksWithAssignment = tasksForAssign.map((task) =>
+        mergeAssignmentToTask(task, assignments, currentUser, todayKey),
+      );
+
       const currentUserIndex = membersForAssign.findIndex((member) =>
         isSameMember(member, currentUser),
       );
@@ -792,22 +999,26 @@ export default async function RecordsPage() {
 
       if (group.assignMode === "balanced") {
         const assigneeByTaskIndex = assignTasksBalancedByPoints(
-          tasksForAssign,
+          tasksWithAssignment,
           membersForAssign.length,
           currentUserIndex,
           group.balanceType,
         );
 
-        for (let taskIndex = 0; taskIndex < tasksForAssign.length; taskIndex += 1) {
+        for (
+          let taskIndex = 0;
+          taskIndex < tasksWithAssignment.length;
+          taskIndex += 1
+        ) {
           if (assigneeByTaskIndex[taskIndex] === currentUserIndex) {
-            assignedToCurrent.push(tasksForAssign[taskIndex]);
+            assignedToCurrent.push(tasksWithAssignment[taskIndex]);
           }
         }
       } else {
-        for (let index = 0; index < tasksForAssign.length; index += 1) {
+        for (let index = 0; index < tasksWithAssignment.length; index += 1) {
           const assignee = membersForAssign[index % membersForAssign.length];
           if (isSameMember(assignee, currentUser)) {
-            assignedToCurrent.push(tasksForAssign[index]);
+            assignedToCurrent.push(tasksWithAssignment[index]);
           }
         }
       }
@@ -855,7 +1066,9 @@ export default async function RecordsPage() {
             </div>
 
             {assignedTasks.length === 0 ? (
-              <p className="text-sm text-slate-500">本日の担当タスクはありません。</p>
+              <p className="text-sm text-slate-500">
+                本日の担当タスクはありません。
+              </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
                 <table className="min-w-full border-collapse text-sm">
@@ -864,6 +1077,7 @@ export default async function RecordsPage() {
                       <th className="px-3 py-2 font-semibold">name</th>
                       <th className="px-3 py-2 font-semibold">point</th>
                       <th className="px-3 py-2 font-semibold">description</th>
+                      <th className="px-3 py-2 font-semibold">status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -878,6 +1092,13 @@ export default async function RecordsPage() {
                         </td>
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
                           {task.description ?? "-"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <AssignmentStatusButton
+                            assignmentId={task.assignmentId}
+                            currentStatus={task.assignmentStatus}
+                            apiUrl={apiUrl}
+                          />
                         </td>
                       </tr>
                     ))}
