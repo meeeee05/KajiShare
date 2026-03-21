@@ -6,6 +6,8 @@ import { useSession } from "next-auth/react";
 
 type Props = {
   assignmentId?: string;
+  taskId?: string;
+  groupId?: string;
   currentStatus?: string;
   apiUrl?: string;
 };
@@ -90,6 +92,8 @@ const displayStatus = (value?: string) => {
 
 export default function AssignmentStatusButton({
   assignmentId,
+  taskId,
+  groupId,
   currentStatus,
   apiUrl,
 }: Props) {
@@ -97,13 +101,13 @@ export default function AssignmentStatusButton({
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [localAssignmentId, setLocalAssignmentId] = useState<
+    string | undefined
+  >(assignmentId);
+
+  const resolveAssignmentId = () => localAssignmentId ?? assignmentId;
 
   const onToggle = () => {
-    if (!assignmentId) {
-      setError("assignment_id がないため更新できません。");
-      return;
-    }
-
     const targetStatus = nextStatus(currentStatus);
     const ok = window.confirm(
       `ステータスを「${displayStatus(currentStatus)}」から「${displayStatus(targetStatus)}」へ変更します。よろしいですか？`,
@@ -126,9 +130,88 @@ export default function AssignmentStatusButton({
         return;
       }
 
+      let currentAssignmentId = resolveAssignmentId();
+
+      if (!currentAssignmentId) {
+        if (!taskId) {
+          setError("assignment が未作成で task_id も無いため更新できません。");
+          return;
+        }
+
+        const createEndpoints = [
+          groupId
+            ? `${v1Base}/groups/${encodeURIComponent(groupId)}/assignments`
+            : null,
+          `${v1Base}/assignments`,
+          groupId
+            ? `${base}/groups/${encodeURIComponent(groupId)}/assignments`
+            : null,
+          `${base}/assignments`,
+        ].filter(Boolean) as string[];
+
+        const createBodies = [
+          {
+            assignment: {
+              task_id: taskId,
+              status: "着手前",
+            },
+          },
+          {
+            assignment: {
+              task_id: taskId,
+              status: "not_started",
+            },
+          },
+          {
+            task_id: taskId,
+            status: "着手前",
+          },
+        ];
+
+        for (const endpoint of createEndpoints) {
+          for (const body of createBodies) {
+            const createRes = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+            }).catch(() => null);
+
+            if (!createRes?.ok) {
+              continue;
+            }
+
+            const created = await createRes.json().catch(() => null);
+            const createdRoot =
+              (created as { assignment?: Record<string, unknown> } | null)
+                ?.assignment ?? (created as Record<string, unknown> | null);
+            const createdId =
+              (createdRoot?.id as string | number | undefined) ??
+              (createdRoot?.assignment_id as string | number | undefined);
+
+            if (createdId != null) {
+              currentAssignmentId = String(createdId);
+              setLocalAssignmentId(currentAssignmentId);
+              break;
+            }
+          }
+
+          if (currentAssignmentId) {
+            break;
+          }
+        }
+
+        if (!currentAssignmentId) {
+          setError("assignment の作成に失敗したため更新できません。");
+          return;
+        }
+      }
+
       const endpoints = [
-        `${v1Base}/assignments/${encodeURIComponent(assignmentId)}`,
-        `${base}/assignments/${encodeURIComponent(assignmentId)}`,
+        `${v1Base}/assignments/${encodeURIComponent(currentAssignmentId)}`,
+        `${base}/assignments/${encodeURIComponent(currentAssignmentId)}`,
       ];
 
       const methods: Array<"PATCH" | "PUT"> = ["PATCH", "PUT"];
@@ -182,7 +265,7 @@ export default function AssignmentStatusButton({
       <button
         type="button"
         onClick={onToggle}
-        disabled={isPending || !assignmentId}
+        disabled={isPending}
         className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
       >
         {isPending ? "更新中..." : displayStatus(currentStatus)}

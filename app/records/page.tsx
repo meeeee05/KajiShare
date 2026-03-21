@@ -431,7 +431,10 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
     status: pickFromSources(assignment, assignmentRoot, ["status", "state"]),
     assigneeId:
       pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
-      pickFromSources(assigneeRoot, assignmentRoot, ["assignee_id", "member_id"]),
+      pickFromSources(assigneeRoot, assignmentRoot, [
+        "assignee_id",
+        "member_id",
+      ]),
     assigneeName: pickFromSources(assignee, assignment, ["name", "user_name"]),
     assigneeEmail: pickFromSources(assignee, assignment, ["email", "mail"]),
     targetDate: pickFromSources(assignment, assignmentRoot, [
@@ -480,12 +483,18 @@ const mergeAssignmentToTask = (
     return task;
   }
 
-  const candidates = assignments.filter((assignment) => {
-    return (
-      normalizeText(assignment.taskId) === taskIdNormalized &&
-      assignmentBelongsToCurrentUser(assignment, currentUser)
-    );
+  const sameTaskAssignments = assignments.filter((assignment) => {
+    return normalizeText(assignment.taskId) === taskIdNormalized;
   });
+
+  const candidates =
+    sameTaskAssignments.filter((assignment) =>
+      assignmentBelongsToCurrentUser(assignment, currentUser),
+    ).length > 0
+      ? sameTaskAssignments.filter((assignment) =>
+          assignmentBelongsToCurrentUser(assignment, currentUser),
+        )
+      : sameTaskAssignments;
 
   if (candidates.length === 0) {
     return task;
@@ -955,9 +964,8 @@ export default async function RecordsPage() {
         }
       }
 
-      const assignments = extractAssignmentsArray(assignmentsPayload).map(
-        normalizeAssignment,
-      );
+      const assignments =
+        extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment);
 
       const tasks = sortTasksForAssignment(
         extractTasksArray(tasksPayload).map(normalizeTask),
@@ -1096,6 +1104,8 @@ export default async function RecordsPage() {
                         <td className="px-3 py-2">
                           <AssignmentStatusButton
                             assignmentId={task.assignmentId}
+                            taskId={task.id}
+                            groupId={group.id}
                             currentStatus={task.assignmentStatus}
                             apiUrl={apiUrl}
                           />
