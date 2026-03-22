@@ -374,6 +374,7 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
     assignmentStatus: pickFromSources(assignment, assignmentRoot, [
       "status",
       "state",
+      "comment",
     ]),
     sourceIndex: index,
   };
@@ -428,7 +429,11 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
     taskId:
       pickFromSources(assignment, assignmentRoot, ["task_id", "taskId"]) ??
       pickFirstString(root, ["task_id", "taskId"]),
-    status: pickFromSources(assignment, assignmentRoot, ["status", "state"]),
+    status: pickFromSources(assignment, assignmentRoot, [
+      "status",
+      "state",
+      "comment",
+    ]),
     assigneeId:
       pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
       pickFromSources(assigneeRoot, assignmentRoot, [
