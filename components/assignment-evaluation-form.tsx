@@ -9,7 +9,10 @@ type Props = {
   apiUrl?: string;
 };
 
-export default function AssignmentEvaluationForm({ assignmentId, apiUrl }: Props) {
+export default function AssignmentEvaluationForm({
+  assignmentId,
+  apiUrl,
+}: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
@@ -39,7 +42,8 @@ export default function AssignmentEvaluationForm({ assignmentId, apiUrl }: Props
     startTransition(async () => {
       setError(null);
 
-      const token = (session?.user as { idToken?: string } | undefined)?.idToken;
+      const token = (session?.user as { idToken?: string } | undefined)
+        ?.idToken;
       const base = apiUrl?.replace(/\/+$/, "");
       const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 

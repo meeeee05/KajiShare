@@ -191,58 +191,40 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
         return;
       }
 
-      const groupsRes = await fetch(`${v1Base}/groups`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        cache: "no-store",
-      }).catch(() => null);
+      const endpoints = [`${v1Base}/groups/join`, `${base}/groups/join`];
 
-      if (!groupsRes?.ok) {
-        const groupsError = await groupsRes?.json().catch(() => null);
-        setJoinError(
-          (groupsError as any)?.error ??
-            (groupsError as any)?.message ??
-            "グループ一覧の取得に失敗しました。",
-        );
-        return;
-      }
+      let joined = false;
+      let lastError = "グループ参加に失敗しました。招待IDをご確認ください。";
 
-      const groupsPayload = await groupsRes.json().catch(() => null);
-      const groups = extractGroups(groupsPayload);
+      for (const endpoint of endpoints) {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ share_key: trimmed }),
+        }).catch(() => null);
 
-      const matched = groups.some((group) => {
-        const shareKey =
-          pickFirstString(group, ["share_key", "shareKey"]) ??
-          pickFirstString(asRecord(group.attributes), [
-            "share_key",
-            "shareKey",
-          ]) ??
-          pickFirstString(asRecord(group.data), ["share_key", "shareKey"]);
-        return shareKey === trimmed;
-      });
+        if (!res) {
+          continue;
+        }
 
-      if (!matched) {
-        setJoinError("招待IDが見つかりません。入力内容をご確認ください。");
-        return;
-      }
+        const data = await res.json().catch(() => null);
 
-      const res = await fetch(`${v1Base}/groups/join`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ share_key: trimmed }),
-      });
+        if (res.ok) {
+          joined = true;
+          break;
+        }
 
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        setJoinError(
+        lastError =
           (data as any)?.error ??
-            "グループ参加に失敗しました。招待IDをご確認ください。",
-        );
+          (data as any)?.message ??
+          `グループ参加に失敗しました。(status: ${res.status})`;
+      }
+
+      if (!joined) {
+        setJoinError(lastError);
         return;
       }
 

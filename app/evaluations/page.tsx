@@ -211,7 +211,10 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
         unwrapEntity(asRecord(membership?.account));
 
       normalized.push({
-        id: pickFromSources(membership, membershipRoot, ["id", "membership_id"]),
+        id: pickFromSources(membership, membershipRoot, [
+          "id",
+          "membership_id",
+        ]),
         groupId,
         member: {
           id:
@@ -351,7 +354,10 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
     ]),
     assigneeId:
       pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
-      pickFromSources(assigneeRoot, assignmentRoot, ["assignee_id", "member_id"]),
+      pickFromSources(assigneeRoot, assignmentRoot, [
+        "assignee_id",
+        "member_id",
+      ]),
     assigneeName: pickFromSources(assignee, assignment, ["name", "user_name"]),
     assigneeEmail: pickFromSources(assignee, assignment, ["email", "mail"]),
   };
@@ -527,9 +533,8 @@ export default async function EvaluationsPage() {
           .map((task) => [normalizeText(task.id), task]),
       );
 
-      const assignments = extractAssignmentsArray(assignmentsPayload).map(
-        normalizeAssignment,
-      );
+      const assignments =
+        extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment);
 
       const rows = assignments
         .filter((assignment) => isCompletedStatus(assignment.status))
@@ -619,7 +624,9 @@ export default async function EvaluationsPage() {
                   <tbody>
                     {rows.map(({ assignment, task, assigneeLabel }, index) => (
                       <tr
-                        key={assignment.id ?? `${group.id ?? group.name}-${index}`}
+                        key={
+                          assignment.id ?? `${group.id ?? group.name}-${index}`
+                        }
                         className="border-t align-top"
                       >
                         <td className="px-3 py-2 font-medium">{task.name}</td>
