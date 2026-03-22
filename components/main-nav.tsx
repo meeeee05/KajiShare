@@ -66,6 +66,17 @@ export function MainNav({
                 担当のタスク
               </NavigationMenuLink>
             </NavigationMenuItem>
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                href="/evaluations"
+                className={
+                  navigationMenuTriggerStyle() +
+                  " text-base md:text-lg font-bold"
+                }
+              >
+                評価
+              </NavigationMenuLink>
+            </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>
       )}
