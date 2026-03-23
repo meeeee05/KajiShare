@@ -52,6 +52,38 @@ const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
 const isFallbackName = (name?: string) => /^グループ\s+\d+$/.test(name ?? "");
 
+const compareStableGroupOrder = (a: GroupListItem, b: GroupListItem) => {
+  const aId = (a.id ?? "").trim();
+  const bId = (b.id ?? "").trim();
+
+  if (aId && bId) {
+    const aNum = Number(aId);
+    const bNum = Number(bId);
+    const aIsNum = Number.isFinite(aNum);
+    const bIsNum = Number.isFinite(bNum);
+
+    if (aIsNum && bIsNum && aNum !== bNum) {
+      return aNum - bNum;
+    }
+
+    const byIdText = aId.localeCompare(bId, "ja");
+    if (byIdText !== 0) {
+      return byIdText;
+    }
+  }
+
+  const aShare = (a.share_key ?? "").trim();
+  const bShare = (b.share_key ?? "").trim();
+  if (aShare && bShare) {
+    const byShare = aShare.localeCompare(bShare, "ja");
+    if (byShare !== 0) {
+      return byShare;
+    }
+  }
+
+  return 0;
+};
+
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -426,6 +458,17 @@ export default async function GroupsPage() {
   let groupList = Array.from(mergedMap.values());
 
   groupList = await enrichFallbackNames(groupList, apiUrl, idToken);
+
+  groupList = groupList
+    .map((group, index) => ({ group, index }))
+    .sort((a, b) => {
+      const byStable = compareStableGroupOrder(a.group, b.group);
+      if (byStable !== 0) {
+        return byStable;
+      }
+      return a.index - b.index;
+    })
+    .map((entry) => entry.group);
 
   if (groupList.length === 0) {
     redirect("/groups/empty");

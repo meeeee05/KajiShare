@@ -26,9 +26,9 @@ const fieldLabelMap: Record<EditableField, string> = {
 };
 
 const ASSIGN_MODE_OPTIONS = [
-  { value: "balanced", label: "balanced" },
-  { value: "random", label: "random" },
-  { value: "manual", label: "manual" },
+  { value: "manual", label: "手動で決める" },
+  { value: "random", label: "ランダムで決める" },
+  { value: "balanced", label: "バランスを考慮する" },
 ] as const;
 
 const BALANCE_TYPE_OPTIONS = [
