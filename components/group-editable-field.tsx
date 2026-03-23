@@ -26,9 +26,9 @@ const fieldLabelMap: Record<EditableField, string> = {
 };
 
 const ASSIGN_MODE_OPTIONS = [
-  { value: "manual", label: "手動で決める" },
-  { value: "random", label: "ランダムで決める" },
-  { value: "balanced", label: "バランスを考慮する" },
+  { value: "balanced", label: "balanced" },
+  { value: "random", label: "random" },
+  { value: "manual", label: "manual" },
 ] as const;
 
 const BALANCE_TYPE_OPTIONS = [
@@ -39,7 +39,7 @@ const BALANCE_TYPE_OPTIONS = [
 const normalizeAssignMode = (value?: string) => {
   const normalized = (value ?? "").trim().toLowerCase();
   if (!normalized) {
-    return "";
+    return "random";
   }
 
   if (normalized === "manual" || normalized === "手動で決める") {
@@ -52,7 +52,7 @@ const normalizeAssignMode = (value?: string) => {
     return "balanced";
   }
 
-  return value ?? "";
+  return "random";
 };
 
 const displayAssignMode = (value?: string) => {
@@ -222,7 +222,6 @@ export default function GroupEditableField({
               aria-label={`${label}入力`}
               disabled={isPending}
             >
-              <option value="">選択してください</option>
               {ASSIGN_MODE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}

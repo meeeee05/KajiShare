@@ -28,7 +28,7 @@ const normalizeAssignMode = (value?: string) => {
   const normalized = normalizeText(value);
 
   if (!normalized) {
-    return "";
+    return "random";
   }
 
   if (normalized.includes("バランス") || normalized.includes("balanced")) {
@@ -41,7 +41,7 @@ const normalizeAssignMode = (value?: string) => {
     return "manual";
   }
 
-  return normalized;
+  return "random";
 };
 
 const isbalancedAssignMode = (value?: string) => {
