@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
@@ -249,9 +249,30 @@ const buildAssignmentPayload = (status: CanonicalStatus) => {
     assignment: {
       due_date: dueDate,
       completed_date: completedDate,
-      comment: status,
+      status,
     },
   };
+};
+
+const buildAssignmentCreatePayloads = (
+  taskId: string,
+  status: CanonicalStatus,
+) => {
+  const base = buildAssignmentPayload(status);
+
+  return [
+    base,
+    {
+      assignment: {
+        ...(base.assignment as Record<string, unknown>),
+        task_id: taskId,
+      },
+    },
+    {
+      task_id: taskId,
+      status,
+    },
+  ];
 };
 
 export default function AssignmentStatusButton({
@@ -271,6 +292,19 @@ export default function AssignmentStatusButton({
   const [localStatus, setLocalStatus] = useState<string | undefined>(
     currentStatus,
   );
+
+  const statusStorageKey = `assignment-status:${groupId ?? ""}:${taskId ?? ""}`;
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(statusStorageKey);
+      if (saved) {
+        setLocalStatus(saved);
+      }
+    } catch {
+      // ignore localStorage access errors
+    }
+  }, [statusStorageKey]);
 
   const resolveAssignmentId = () => localAssignmentId ?? assignmentId;
   const effectiveStatus = localStatus ?? currentStatus;
@@ -398,43 +432,61 @@ export default function AssignmentStatusButton({
 
         const createEndpoints = [
           `${v1Base}/tasks/${encodeURIComponent(taskId)}/assignments`,
+          `${v1Base}/assignments`,
         ];
+        const createPayloads = buildAssignmentCreatePayloads(
+          taskId,
+          "not_started",
+        );
+        let createLastError = "assignment の作成に失敗しました。";
 
         for (const endpoint of createEndpoints) {
-          const createRes = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(buildAssignmentPayload("not_started")),
-          }).catch(() => null);
+          for (const payload of createPayloads) {
+            const createRes = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            }).catch(() => null);
 
-          if (createRes?.status === 422) {
-            const existingId = await findExistingAssignmentId(taskId);
-            if (existingId) {
-              currentAssignmentId = existingId;
-              setLocalAssignmentId(existingId);
+            if (createRes?.status === 422) {
+              const existingId = await findExistingAssignmentId(taskId);
+              if (existingId) {
+                currentAssignmentId = existingId;
+                setLocalAssignmentId(existingId);
+                break;
+              }
+            }
+
+            if (!createRes?.ok) {
+              const failed = await createRes?.json().catch(() => null);
+              createLastError =
+                (failed as { error?: string; message?: string } | null)?.error ??
+                (failed as { error?: string; message?: string } | null)
+                  ?.message ??
+                `assignment の作成に失敗しました。(status: ${createRes?.status ?? "network"})`;
+              continue;
+            }
+
+            const created = await createRes.json().catch(() => null);
+            const createdRoot =
+              (created as { assignment?: Record<string, unknown> } | null)
+                ?.assignment ?? (created as Record<string, unknown> | null);
+            const createdId =
+              (createdRoot?.id as string | number | undefined) ??
+              (createdRoot?.assignment_id as string | number | undefined);
+
+            if (createdId != null) {
+              currentAssignmentId = String(createdId);
+              setLocalAssignmentId(currentAssignmentId);
               break;
             }
-          }
 
-          if (!createRes?.ok) {
-            continue;
-          }
-
-          const created = await createRes.json().catch(() => null);
-          const createdRoot =
-            (created as { assignment?: Record<string, unknown> } | null)
-              ?.assignment ?? (created as Record<string, unknown> | null);
-          const createdId =
-            (createdRoot?.id as string | number | undefined) ??
-            (createdRoot?.assignment_id as string | number | undefined);
-
-          if (createdId != null) {
-            currentAssignmentId = String(createdId);
-            setLocalAssignmentId(currentAssignmentId);
-            break;
+            if (currentAssignmentId) {
+              break;
+            }
           }
 
           if (currentAssignmentId) {
@@ -443,7 +495,7 @@ export default function AssignmentStatusButton({
         }
 
         if (!currentAssignmentId) {
-          setError("assignment の作成に失敗したため更新できません。");
+          setError(createLastError);
           return;
         }
       }
@@ -473,6 +525,11 @@ export default function AssignmentStatusButton({
 
           if (res.ok) {
             setLocalStatus(targetStatus);
+            try {
+              window.localStorage.setItem(statusStorageKey, targetStatus);
+            } catch {
+              // ignore localStorage access errors
+            }
             router.refresh();
             return;
           }
