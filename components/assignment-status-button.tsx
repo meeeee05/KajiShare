@@ -12,6 +12,20 @@ type Props = {
   apiUrl?: string;
 };
 
+type AssignmentRow = {
+  id?: string;
+  taskId?: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  assigneeEmail?: string;
+};
+
+type UserIdentity = {
+  id?: string;
+  name?: string;
+  email?: string;
+};
+
 type AnyRecord = Record<string, unknown>;
 
 const normalizeStatus = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -89,6 +103,61 @@ const asRecord = (value: unknown): AnyRecord | null => {
   return value as AnyRecord;
 };
 
+const pickFirstString = (
+  obj: AnyRecord | null,
+  keys: string[],
+): string | undefined => {
+  if (!obj) {
+    return undefined;
+  }
+
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return undefined;
+};
+
+const unwrapEntity = (value: AnyRecord | null) =>
+  asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
+
+const pickFromSources = (
+  sourceA: AnyRecord | null,
+  sourceB: AnyRecord | null,
+  keys: string[],
+) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
+
+const normalizeIdentityText = (value?: string) =>
+  (value ?? "").trim().toLowerCase();
+
+const isSameUser = (a: UserIdentity, b: UserIdentity) => {
+  const aId = normalizeIdentityText(a.id);
+  const bId = normalizeIdentityText(b.id);
+  if (aId && bId) {
+    return aId === bId;
+  }
+
+  const aEmail = normalizeIdentityText(a.email);
+  const bEmail = normalizeIdentityText(b.email);
+  if (aEmail && bEmail) {
+    return aEmail === bEmail;
+  }
+
+  const aName = normalizeIdentityText(a.name);
+  const bName = normalizeIdentityText(b.name);
+  if (aName && bName) {
+    return aName === bName;
+  }
+
+  return false;
+};
+
 const firstArray = (...values: unknown[]): unknown[] => {
   for (const value of values) {
     if (Array.isArray(value)) {
@@ -136,6 +205,38 @@ const pickAssignmentId = (payload: unknown): string | undefined => {
   }
 
   return undefined;
+};
+
+const normalizeAssignmentRow = (payload: unknown): AssignmentRow => {
+  const root = asRecord(payload);
+  const assignmentRoot = asRecord(root?.assignment) ?? root;
+  const assignment = unwrapEntity(assignmentRoot);
+
+  const assigneeRoot =
+    asRecord(assignmentRoot?.assignee) ??
+    asRecord(assignmentRoot?.user) ??
+    asRecord(assignment?.assignee) ??
+    asRecord(assignment?.user);
+  const assignee = unwrapEntity(assigneeRoot);
+
+  return {
+    id: pickFromSources(assignment, assignmentRoot, [
+      "id",
+      "assignment_id",
+      "assignmentId",
+    ]),
+    taskId:
+      pickFromSources(assignment, assignmentRoot, ["task_id", "taskId"]) ??
+      pickFirstString(root, ["task_id", "taskId"]),
+    assigneeId:
+      pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
+      pickFromSources(assigneeRoot, assignmentRoot, [
+        "assignee_id",
+        "member_id",
+      ]),
+    assigneeName: pickFromSources(assignee, assignment, ["name", "user_name"]),
+    assigneeEmail: pickFromSources(assignee, assignment, ["email", "mail"]),
+  };
 };
 
 const todayYmd = () => new Date().toISOString().slice(0, 10);
@@ -190,6 +291,13 @@ export default function AssignmentStatusButton({
 
       const token = (session?.user as { idToken?: string } | undefined)
         ?.idToken;
+      const currentUser: UserIdentity = {
+        id:
+          (session?.user as { id?: string } | undefined)?.id ??
+          (session?.user as { userId?: string } | undefined)?.userId,
+        name: session?.user?.name ?? undefined,
+        email: session?.user?.email ?? undefined,
+      };
       const base = apiUrl?.replace(/\/+$/, "");
       const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
@@ -201,6 +309,7 @@ export default function AssignmentStatusButton({
       let currentAssignmentId = resolveAssignmentId();
 
       const findExistingAssignmentId = async (nextTaskId: string) => {
+        const taskKey = normalizeIdentityText(nextTaskId);
         const endpoints = [
           `${v1Base}/tasks/${encodeURIComponent(nextTaskId)}/assignments`,
           `${v1Base}/assignments?task_id=${encodeURIComponent(nextTaskId)}`,
@@ -219,12 +328,44 @@ export default function AssignmentStatusButton({
           }
 
           const data = await res.json().catch(() => null);
-          const directId = pickAssignmentId(data);
-          if (directId) {
-            return directId;
+          const directRow = normalizeAssignmentRow(data);
+          if (
+            directRow.id &&
+            normalizeIdentityText(directRow.taskId) === taskKey &&
+            isSameUser(
+              {
+                id: directRow.assigneeId,
+                name: directRow.assigneeName,
+                email: directRow.assigneeEmail,
+              },
+              currentUser,
+            )
+          ) {
+            return directRow.id;
           }
 
           const rows = extractAssignmentsArray(data);
+          const normalizedRows = rows.map(normalizeAssignmentRow);
+
+          const ownRow = normalizedRows.find((row) => {
+            if (!row.id || normalizeIdentityText(row.taskId) !== taskKey) {
+              return false;
+            }
+
+            return isSameUser(
+              {
+                id: row.assigneeId,
+                name: row.assigneeName,
+                email: row.assigneeEmail,
+              },
+              currentUser,
+            );
+          });
+
+          if (ownRow?.id) {
+            return ownRow.id;
+          }
+
           for (const row of rows) {
             const rowId = pickAssignmentId(row);
             if (rowId) {

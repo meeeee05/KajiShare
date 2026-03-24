@@ -8,6 +8,7 @@ type AnyRecord = Record<string, unknown>;
 type GroupItem = {
   id?: string;
   name: string;
+  shareKey?: string;
   assignMode: "manual" | "random" | "balanced" | "";
   balanceType: "more" | "less" | "";
 };
@@ -20,6 +21,8 @@ type MemberItem = {
 
 type MembershipItem = {
   groupId?: string;
+  groupName?: string;
+  groupShareKey?: string;
   member: MemberItem;
 };
 
@@ -195,6 +198,10 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
       const name =
         pickFromSources(group, baseObj, ["name"]) ??
         pickFromSources(source, root, ["name"]);
+      const shareKey = pickFromSources(group, baseObj, [
+        "share_key",
+        "shareKey",
+      ]);
 
       if (!name) {
         continue;
@@ -210,6 +217,7 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
       put({
         id,
         name,
+        shareKey,
         assignMode,
         balanceType,
       });
@@ -271,7 +279,15 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
 
       const groupId =
         pickFromSources(group, membership, ["id", "group_id", "groupId"]) ??
-        pickFirstString(membershipRoot, ["group_id", "groupId"]);
+        pickFirstString(membershipRoot, ["group_id", "groupId", "gid"]);
+      const groupName = pickFromSources(group, membership, [
+        "name",
+        "group_name",
+      ]);
+      const groupShareKey = pickFromSources(group, membership, [
+        "share_key",
+        "shareKey",
+      ]);
 
       const candidateMember =
         unwrapEntity(asRecord(membershipRoot?.member)) ??
@@ -301,7 +317,7 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
         ]),
       };
 
-      normalized.push({ groupId, member });
+      normalized.push({ groupId, groupName, groupShareKey, member });
     }
   }
 
@@ -549,6 +565,67 @@ const sortTasksForAssignment = (tasks: TaskItem[]) => {
   });
 };
 
+const selectLatestAssignmentForTask = (
+  task: TaskItem,
+  assignments: AssignmentItem[],
+  membersForAssign: MemberItem[],
+  todayKey: string,
+) => {
+  const taskIdNormalized = normalizeText(task.id);
+  if (!taskIdNormalized) {
+    return undefined;
+  }
+
+  const candidates = assignments
+    .filter(
+      (assignment) => normalizeText(assignment.taskId) === taskIdNormalized,
+    )
+    .map((assignment) => {
+      const assigneeIndex = membersForAssign.findIndex((member) =>
+        isSameMember(member, {
+          id: assignment.assigneeId,
+          name: assignment.assigneeName,
+          email: assignment.assigneeEmail,
+        }),
+      );
+
+      return {
+        assignment,
+        assigneeIndex,
+      };
+    })
+    .filter((row) => row.assigneeIndex >= 0);
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  const sorted = [...candidates].sort((a, b) => {
+    const aToday = isSameDay(a.assignment.targetDate, todayKey) ? 1 : 0;
+    const bToday = isSameDay(b.assignment.targetDate, todayKey) ? 1 : 0;
+    if (aToday !== bToday) {
+      return bToday - aToday;
+    }
+
+    const aTime = a.assignment.updatedAt
+      ? Date.parse(a.assignment.updatedAt)
+      : Number.NaN;
+    const bTime = b.assignment.updatedAt
+      ? Date.parse(b.assignment.updatedAt)
+      : Number.NaN;
+    const aValid = Number.isFinite(aTime);
+    const bValid = Number.isFinite(bTime);
+
+    if (aValid && bValid && aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    return 0;
+  });
+
+  return sorted[0];
+};
+
 const sortMembersStable = (members: MemberItem[]) => {
   return [...members].sort((a, b) => {
     const aKey = `${normalizeText(a.id)}|${normalizeText(a.email)}|${normalizeText(a.name)}`;
@@ -621,6 +698,57 @@ const uniqueMembers = (members: MemberItem[]) => {
   }
 
   return result;
+};
+
+const membershipBelongsToGroup = (
+  membership: MembershipItem,
+  group: GroupItem,
+) => {
+  const membershipGroupId = normalizeText(membership.groupId);
+  const groupId = normalizeText(group.id);
+  if (membershipGroupId && groupId && membershipGroupId === groupId) {
+    return true;
+  }
+
+  const membershipShare = normalizeText(membership.groupShareKey);
+  const groupShare = normalizeText(group.shareKey);
+  if (membershipShare && groupShare && membershipShare === groupShare) {
+    return true;
+  }
+
+  const membershipName = normalizeText(membership.groupName);
+  const groupName = normalizeText(group.name);
+  if (membershipName && groupName && membershipName === groupName) {
+    return true;
+  }
+
+  return false;
+};
+
+const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
+  const root = asRecord(payload);
+  const userRoot =
+    asRecord(root?.user) ??
+    asRecord(root?.member) ??
+    asRecord(root?.account) ??
+    asRecord(root?.data) ??
+    root;
+  const user = unwrapEntity(userRoot);
+
+  return {
+    id: pickFromSources(user, userRoot, [
+      "id",
+      "user_id",
+      "userId",
+      "member_id",
+    ]),
+    name: pickFromSources(user, userRoot, ["name", "user_name", "member_name"]),
+    email: pickFromSources(user, userRoot, ["email", "mail", "member_email"]),
+  };
+};
+
+const hasMemberIdentity = (member: MemberItem) => {
+  return Boolean(member.id || member.email || member.name);
 };
 
 const taskPointValue = (task: TaskItem) => {
@@ -804,6 +932,53 @@ const assignTasksBalancedByPoints = (
   return assignment;
 };
 
+const assignTasksBalancedGlobally = (
+  tasks: TaskItem[],
+  memberCount: number,
+) => {
+  if (memberCount <= 0) {
+    return [] as number[];
+  }
+
+  const assignment = new Array<number>(tasks.length).fill(0);
+  const totals = new Array<number>(memberCount).fill(0);
+  const buckets: number[][] = new Array(memberCount)
+    .fill(null)
+    .map(() => [] as number[]);
+
+  const sortedTaskIndices = Array.from(
+    { length: tasks.length },
+    (_, i) => i,
+  ).sort((a, b) => {
+    const diff = taskPointValue(tasks[b]) - taskPointValue(tasks[a]);
+    if (diff !== 0) {
+      return diff;
+    }
+    return tasks[a].sourceIndex - tasks[b].sourceIndex;
+  });
+
+  for (const taskIndex of sortedTaskIndices) {
+    let assigneeIndex = 0;
+
+    for (let memberIndex = 1; memberIndex < memberCount; memberIndex += 1) {
+      const betterTotal = totals[memberIndex] < totals[assigneeIndex];
+      const tieTotal = totals[memberIndex] === totals[assigneeIndex];
+      const betterCount =
+        tieTotal && buckets[memberIndex].length < buckets[assigneeIndex].length;
+
+      if (betterTotal || betterCount) {
+        assigneeIndex = memberIndex;
+      }
+    }
+
+    assignment[taskIndex] = assigneeIndex;
+    buckets[assigneeIndex].push(taskIndex);
+    totals[assigneeIndex] += taskPointValue(tasks[taskIndex]);
+  }
+
+  return assignment;
+};
+
 const assignmentModeLabel = (mode: GroupItem["assignMode"]) => {
   if (mode === "manual") {
     return "manual";
@@ -825,6 +1000,16 @@ const balanceTypeLabel = (value: GroupItem["balanceType"]) => {
     return "少なめ";
   }
   return "未設定";
+};
+
+const recordsDebugEnabled = process.env.RECORDS_DEBUG === "1";
+
+const recordsDebugLog = (label: string, payload: unknown) => {
+  if (!recordsDebugEnabled) {
+    return;
+  }
+
+  console.info(`[records-debug] ${label}`, payload);
 };
 
 export default async function RecordsPage() {
@@ -861,13 +1046,21 @@ export default async function RecordsPage() {
     return res.json().catch(() => null);
   };
 
-  const [groupsV1, groupsLegacy, membershipsV1, membershipsLegacy] =
-    await Promise.all([
-      fetchOkJson(`${v1Base}/groups`),
-      fetchOkJson(`${base}/groups`),
-      fetchOkJson(`${v1Base}/memberships`),
-      fetchOkJson(`${base}/memberships`),
-    ]);
+  const [
+    groupsV1,
+    groupsLegacy,
+    membershipsV1,
+    membershipsLegacy,
+    meV1,
+    meLegacy,
+  ] = await Promise.all([
+    fetchOkJson(`${v1Base}/groups`),
+    fetchOkJson(`${base}/groups`),
+    fetchOkJson(`${v1Base}/memberships`),
+    fetchOkJson(`${base}/memberships`),
+    fetchOkJson(`${v1Base}/users/me`),
+    fetchOkJson(`${base}/users/me`),
+  ]);
 
   const groups = normalizeGroups([
     groupsV1,
@@ -899,12 +1092,19 @@ export default async function RecordsPage() {
 
   const memberships = normalizeMemberships([membershipsV1, membershipsLegacy]);
 
+  const meFromV1 = extractCurrentUserIdentity(meV1);
+  const meFromLegacy = extractCurrentUserIdentity(meLegacy);
+  const currentUserFromApi = hasMemberIdentity(meFromV1)
+    ? meFromV1
+    : meFromLegacy;
+
   const currentUser: MemberItem = {
     id:
+      currentUserFromApi.id ??
       (session.user as { id?: string } | undefined)?.id ??
       (session.user as { userId?: string } | undefined)?.userId,
-    name: session.user?.name ?? undefined,
-    email: session.user?.email ?? undefined,
+    name: currentUserFromApi.name ?? session.user?.name ?? undefined,
+    email: currentUserFromApi.email ?? session.user?.email ?? undefined,
   };
 
   const todayKey = new Date().toISOString().slice(0, 10);
@@ -913,14 +1113,7 @@ export default async function RecordsPage() {
     groups.map(async (group) => {
       const membersInGroup = uniqueMembers(
         memberships
-          .filter((membership) => {
-            if (!group.id) {
-              return false;
-            }
-            return (
-              normalizeText(membership.groupId) === normalizeText(group.id)
-            );
-          })
+          .filter((membership) => membershipBelongsToGroup(membership, group))
           .map((membership) => membership.member),
       );
 
@@ -929,6 +1122,18 @@ export default async function RecordsPage() {
           ? [...membersInGroup, currentUser]
           : [currentUser],
       );
+
+      recordsDebugLog("group-members", {
+        groupId: group.id,
+        groupName: group.name,
+        membersInGroupCount: membersInGroup.length,
+        membersCount: members.length,
+        members: members.map((member) => ({
+          id: member.id,
+          name: member.name,
+          email: member.email,
+        })),
+      });
 
       if (!group.id) {
         return {
@@ -976,6 +1181,13 @@ export default async function RecordsPage() {
         extractTasksArray(tasksPayload).map(normalizeTask),
       );
 
+      recordsDebugLog("group-source-counts", {
+        groupId: group.id,
+        groupName: group.name,
+        tasksCount: tasks.length,
+        assignmentsCount: assignments.length,
+      });
+
       if (tasks.length === 0) {
         return {
           group,
@@ -1000,41 +1212,107 @@ export default async function RecordsPage() {
             )
           : tasks;
 
-      const tasksWithAssignment = tasksForAssign.map((task) =>
-        mergeAssignmentToTask(task, assignments, currentUser, todayKey),
-      );
-
       const currentUserIndex = membersForAssign.findIndex((member) =>
         isSameMember(member, currentUser),
       );
 
-      const assignedToCurrent: TaskItem[] = [];
+      if (currentUserIndex < 0) {
+        return {
+          group,
+          assignedTasks: [] as TaskItem[],
+        };
+      }
 
-      if (group.assignMode === "balanced") {
-        const assigneeByTaskIndex = assignTasksBalancedByPoints(
-          tasksWithAssignment,
-          membersForAssign.length,
-          currentUserIndex,
-          group.balanceType,
+      const tasksWithAssignment = tasksForAssign.map((task) => {
+        const selected = selectLatestAssignmentForTask(
+          task,
+          assignments,
+          membersForAssign,
+          todayKey,
         );
 
-        for (
-          let taskIndex = 0;
-          taskIndex < tasksWithAssignment.length;
-          taskIndex += 1
-        ) {
-          if (assigneeByTaskIndex[taskIndex] === currentUserIndex) {
-            assignedToCurrent.push(tasksWithAssignment[taskIndex]);
-          }
+        if (!selected) {
+          return task;
         }
-      } else {
-        for (let index = 0; index < tasksWithAssignment.length; index += 1) {
-          const assignee = membersForAssign[index % membersForAssign.length];
-          if (isSameMember(assignee, currentUser)) {
-            assignedToCurrent.push(tasksWithAssignment[index]);
-          }
+
+        return {
+          ...task,
+          assignmentId: selected.assignment.id ?? task.assignmentId,
+          assignmentStatus: selected.assignment.status ?? task.assignmentStatus,
+        };
+      });
+
+      const assignedToCurrent: TaskItem[] = [];
+
+      const fallbackAssigneeByTaskIndex =
+        group.assignMode === "balanced"
+          ? assignTasksBalancedGlobally(
+              tasksWithAssignment,
+              membersForAssign.length,
+            )
+          : tasksWithAssignment.map(
+              (_, index) => index % membersForAssign.length,
+            );
+
+      const debugResolved: Array<{
+        taskId?: string;
+        taskName: string;
+        selectedAssignmentId?: string;
+        selectedAssigneeId?: string;
+        selectedAssigneeEmail?: string;
+        fallbackAssigneeIndex: number;
+      }> = [];
+
+      for (
+        let taskIndex = 0;
+        taskIndex < tasksWithAssignment.length;
+        taskIndex += 1
+      ) {
+        const task = tasksWithAssignment[taskIndex];
+        const selected = selectLatestAssignmentForTask(
+          task,
+          assignments,
+          membersForAssign,
+          todayKey,
+        );
+
+        const finalAssigneeIndex =
+          selected?.assigneeIndex ??
+          fallbackAssigneeByTaskIndex[taskIndex] ??
+          0;
+
+        debugResolved.push({
+          taskId: task.id,
+          taskName: task.name,
+          selectedAssignmentId: selected?.assignment.id,
+          selectedAssigneeId: selected?.assignment.assigneeId,
+          selectedAssigneeEmail: selected?.assignment.assigneeEmail,
+          fallbackAssigneeIndex: fallbackAssigneeByTaskIndex[taskIndex] ?? 0,
+        });
+
+        if (finalAssigneeIndex !== currentUserIndex) {
+          continue;
         }
+
+        assignedToCurrent.push(task);
       }
+
+      recordsDebugLog("group-resolved-assignment", {
+        groupId: group.id,
+        groupName: group.name,
+        assignMode: group.assignMode,
+        balanceType: group.balanceType,
+        currentUserIndex,
+        membersForAssign: membersForAssign.map((member, index) => ({
+          index,
+          id: member.id,
+          name: member.name,
+          email: member.email,
+        })),
+        resolved: debugResolved,
+        assignedToCurrentCount: assignedToCurrent.length,
+        assignedToCurrentTaskIds: assignedToCurrent.map((task) => task.id),
+      });
 
       return {
         group,
