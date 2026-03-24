@@ -8,9 +8,15 @@ type Props = {
   taskId?: string;
   groupId?: string;
   apiUrl?: string;
+  textOnly?: boolean;
 };
 
-export default function TaskDeleteButton({ taskId, groupId, apiUrl }: Props) {
+export default function TaskDeleteButton({
+  taskId,
+  groupId,
+  apiUrl,
+  textOnly,
+}: Props) {
   const router = useRouter();
   const { data: session } = useSession();
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +46,7 @@ export default function TaskDeleteButton({ taskId, groupId, apiUrl }: Props) {
         return;
       }
 
-      const endpoints = [
-        groupId
-          ? `${v1Base}/groups/${encodeURIComponent(groupId)}/tasks/${encodeURIComponent(taskId)}`
-          : null,
-        `${v1Base}/tasks/${encodeURIComponent(taskId)}`,
-      ].filter(Boolean) as string[];
+      const endpoints = [`${v1Base}/tasks/${encodeURIComponent(taskId)}`];
 
       let lastError = "タスク削除に失敗しました。";
 
@@ -84,7 +85,11 @@ export default function TaskDeleteButton({ taskId, groupId, apiUrl }: Props) {
         type="button"
         onClick={onDelete}
         disabled={isPending || !taskId}
-        className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+        className={
+          textOnly
+            ? "text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+            : "rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+        }
       >
         削除
       </button>

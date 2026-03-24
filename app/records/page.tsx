@@ -666,6 +666,26 @@ const shuffleWithSeed = <T,>(items: T[], seedKey: string): T[] => {
   return next;
 };
 
+const fallbackAssigneeIndexForTask = (
+  task: TaskItem,
+  memberCount: number,
+  mode: GroupItem["assignMode"],
+  groupKey: string,
+  todayKey: string,
+) => {
+  if (memberCount <= 0) {
+    return 0;
+  }
+
+  const taskKey = task.id ?? `${task.name}:${task.sourceIndex}`;
+  const seedKey =
+    mode === "random"
+      ? `${todayKey}:${groupKey}:${taskKey}`
+      : `${groupKey}:${taskKey}`;
+
+  return hashString(seedKey) % memberCount;
+};
+
 const isSameMember = (a: MemberItem, b: MemberItem) => {
   const aId = normalizeText(a.id);
   const bId = normalizeText(b.id);
@@ -1243,16 +1263,7 @@ export default async function RecordsPage() {
       });
 
       const assignedToCurrent: TaskItem[] = [];
-
-      const fallbackAssigneeByTaskIndex =
-        group.assignMode === "balanced"
-          ? assignTasksBalancedGlobally(
-              tasksWithAssignment,
-              membersForAssign.length,
-            )
-          : tasksWithAssignment.map(
-              (_, index) => index % membersForAssign.length,
-            );
+      const groupKey = group.id ?? group.name;
 
       const debugResolved: Array<{
         taskId?: string;
@@ -1276,10 +1287,16 @@ export default async function RecordsPage() {
           todayKey,
         );
 
+        const fallbackAssigneeIndex = fallbackAssigneeIndexForTask(
+          task,
+          membersForAssign.length,
+          group.assignMode,
+          groupKey,
+          todayKey,
+        );
+
         const finalAssigneeIndex =
-          selected?.assigneeIndex ??
-          fallbackAssigneeByTaskIndex[taskIndex] ??
-          0;
+          selected?.assigneeIndex ?? fallbackAssigneeIndex;
 
         debugResolved.push({
           taskId: task.id,
@@ -1287,7 +1304,7 @@ export default async function RecordsPage() {
           selectedAssignmentId: selected?.assignment.id,
           selectedAssigneeId: selected?.assignment.assigneeId,
           selectedAssigneeEmail: selected?.assignment.assigneeEmail,
-          fallbackAssigneeIndex: fallbackAssigneeByTaskIndex[taskIndex] ?? 0,
+          fallbackAssigneeIndex,
         });
 
         if (finalAssigneeIndex !== currentUserIndex) {
@@ -1391,6 +1408,7 @@ export default async function RecordsPage() {
                             groupId={group.id}
                             currentStatus={task.assignmentStatus}
                             apiUrl={apiUrl}
+                            showDeleteWhenCompleted
                           />
                         </td>
                       </tr>

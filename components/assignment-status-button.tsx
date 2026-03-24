@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import TaskDeleteButton from "@/components/task-delete-button";
 
 type Props = {
   assignmentId?: string;
@@ -10,6 +11,7 @@ type Props = {
   groupId?: string;
   currentStatus?: string;
   apiUrl?: string;
+  showDeleteWhenCompleted?: boolean;
 };
 
 type AssignmentRow = {
@@ -281,6 +283,7 @@ export default function AssignmentStatusButton({
   groupId,
   currentStatus,
   apiUrl,
+  showDeleteWhenCompleted,
 }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -463,7 +466,8 @@ export default function AssignmentStatusButton({
             if (!createRes?.ok) {
               const failed = await createRes?.json().catch(() => null);
               createLastError =
-                (failed as { error?: string; message?: string } | null)?.error ??
+                (failed as { error?: string; message?: string } | null)
+                  ?.error ??
                 (failed as { error?: string; message?: string } | null)
                   ?.message ??
                 `assignment の作成に失敗しました。(status: ${createRes?.status ?? "network"})`;
@@ -547,21 +551,34 @@ export default function AssignmentStatusButton({
   };
 
   return (
-    <div className="flex flex-col items-start gap-1">
-      {isCompleted ? (
-        <span className="px-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
-          {displayStatus(effectiveStatus)}
-        </span>
-      ) : (
-        <button
-          type="button"
-          onClick={onToggle}
-          disabled={isPending}
-          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-        >
-          {isPending ? "更新中..." : displayStatus(effectiveStatus)}
-        </button>
-      )}
+    <div className="flex w-full flex-col items-start gap-1">
+      <div className="flex w-full items-center gap-2">
+        {isCompleted ? (
+          <span className="px-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {displayStatus(effectiveStatus)}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={onToggle}
+            disabled={isPending}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {isPending ? "更新中..." : displayStatus(effectiveStatus)}
+          </button>
+        )}
+
+        {showDeleteWhenCompleted && isCompleted ? (
+          <div className="ml-auto">
+            <TaskDeleteButton
+              taskId={taskId}
+              groupId={groupId}
+              apiUrl={apiUrl}
+              textOnly
+            />
+          </div>
+        ) : null}
+      </div>
       {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
     </div>
   );
