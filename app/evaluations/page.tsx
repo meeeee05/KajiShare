@@ -39,6 +39,7 @@ type AssignmentItem = {
   membershipId?: string;
   status?: string;
   completedDate?: string;
+  completedByUserId?: string;
   assigneeId?: string;
   assigneeName?: string;
   assigneeEmail?: string;
@@ -454,6 +455,11 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       "finished_at",
       "finishedAt",
     ]),
+    completedByUserId:
+      pickFromSources(assignment, assignmentRoot, [
+        "completed_by_user_id",
+        "completedByUserId",
+      ]) ?? pickFirstString(root, ["completed_by_user_id", "completedByUserId"]),
     assigneeId:
       pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
       pickFromSources(membershipMember, membership, [
@@ -543,6 +549,15 @@ const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
 
 const hasMemberIdentity = (member: MemberItem) => {
   return Boolean(member.id || member.email || member.name);
+};
+
+const shuffleArray = <T,>(items: T[]): T[] => {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
 };
 
 const membershipBelongsToGroup = (
@@ -673,6 +688,16 @@ export default async function EvaluationsPage() {
   };
 
   const normalizedCurrentUserId = normalizeText(currentUser.id);
+  const selfUserIds = new Set(
+    [currentUser.id, sessionUserId]
+      .map((value) => normalizeText(value))
+      .filter((value) => value.length > 0),
+  );
+  const selfEmails = new Set(
+    [currentUser.email, session.user?.email]
+      .map((value) => (typeof value === "string" ? normalizeText(value) : ""))
+      .filter((value) => value.length > 0),
+  );
 
   const globalMemberByMembershipId = new Map(
     memberships
@@ -889,6 +914,11 @@ export default async function EvaluationsPage() {
 
       const rows = completedAssignments
         .map((assignment) => {
+          const completedByUserId = normalizeText(assignment.completedByUserId);
+          if (completedByUserId && selfUserIds.has(completedByUserId)) {
+            return null;
+          }
+
           const assignmentMembershipId = normalizeText(assignment.membershipId);
           if (
             assignmentMembershipId &&
@@ -952,6 +982,22 @@ export default async function EvaluationsPage() {
             return null;
           }
 
+          const normalizedResolvedAssigneeId = normalizeText(assignee.id);
+          if (
+            normalizedResolvedAssigneeId &&
+            selfUserIds.has(normalizedResolvedAssigneeId)
+          ) {
+            return null;
+          }
+
+          const normalizedResolvedAssigneeEmail = normalizeText(assignee.email);
+          if (
+            normalizedResolvedAssigneeEmail &&
+            selfEmails.has(normalizedResolvedAssigneeEmail)
+          ) {
+            return null;
+          }
+
           const task = taskByIdWithDetails.get(
             normalizeText(assignment.taskId),
           ) ?? {
@@ -972,7 +1018,7 @@ export default async function EvaluationsPage() {
 
       return {
         group,
-        rows,
+        rows: shuffleArray(rows),
       };
     }),
   );
