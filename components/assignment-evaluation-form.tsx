@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 type Props = {
@@ -13,15 +12,16 @@ export default function AssignmentEvaluationForm({
   assignmentId,
   apiUrl,
 }: Props) {
-  const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [score, setScore] = useState("3");
   const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const formElement = event.currentTarget;
 
     if (!assignmentId) {
       setError("assignment_id がないため評価できません。");
@@ -41,6 +41,7 @@ export default function AssignmentEvaluationForm({
 
     startTransition(async () => {
       setError(null);
+      setInfo(null);
 
       const token = (session?.user as { idToken?: string } | undefined)
         ?.idToken;
@@ -52,62 +53,54 @@ export default function AssignmentEvaluationForm({
         return;
       }
 
-      const endpoints = [
-        `${v1Base}/assignments/${encodeURIComponent(assignmentId)}/evaluations`,
-        `${v1Base}/evaluations`,
-      ];
-
-      const payloads = [
-        {
-          evaluation: {
-            score: parsedScore,
-            comment: comment.trim(),
-          },
-        },
-        {
-          evaluation: {
-            point: parsedScore,
-            comment: comment.trim(),
-          },
-        },
-        {
-          assignment_id: assignmentId,
+      const endpoint = `${v1Base}/assignments/${encodeURIComponent(assignmentId)}/evaluations`;
+      const payload = {
+        evaluation: {
           score: parsedScore,
           comment: comment.trim(),
         },
-      ];
+      };
 
-      let lastError = "評価の登録に失敗しました。";
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      }).catch(() => null);
 
-      for (const endpoint of endpoints) {
-        for (const payload of payloads) {
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(payload),
-          }).catch(() => null);
-
-          if (!res) {
-            continue;
-          }
-
-          if (res.ok) {
-            setComment("");
-            setScore("3");
-            router.refresh();
-            return;
-          }
-
-          const data = await res.json().catch(() => null);
-          lastError =
-            (data as { error?: string; message?: string } | null)?.error ??
-            (data as { error?: string; message?: string } | null)?.message ??
-            `評価の登録に失敗しました。(status: ${res.status})`;
-        }
+      if (!res) {
+        setError("評価の登録に失敗しました。ネットワークをご確認ください。");
+        return;
       }
+
+      if (res.ok) {
+        setComment("");
+        setScore("3");
+        const row = formElement.closest("tr");
+        if (row) {
+          row.remove();
+        }
+        return;
+      }
+
+      if (res.status === 422) {
+        setInfo("評価済み");
+        setTimeout(() => {
+          const row = formElement.closest("tr");
+          if (row) {
+            row.remove();
+          }
+        }, 300);
+        return;
+      }
+
+      const data = await res.json().catch(() => null);
+      const lastError =
+        (data as { error?: string; message?: string } | null)?.error ??
+        (data as { error?: string; message?: string } | null)?.message ??
+        `評価の登録に失敗しました。(status: ${res.status})`;
 
       setError(lastError);
     });
@@ -142,6 +135,7 @@ export default function AssignmentEvaluationForm({
         {isPending ? "送信中..." : "評価する"}
       </button>
       {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
+      {info ? <span className="text-[10px] text-slate-500">{info}</span> : null}
     </form>
   );
 }

@@ -459,7 +459,8 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       pickFromSources(assignment, assignmentRoot, [
         "completed_by_user_id",
         "completedByUserId",
-      ]) ?? pickFirstString(root, ["completed_by_user_id", "completedByUserId"]),
+      ]) ??
+      pickFirstString(root, ["completed_by_user_id", "completedByUserId"]),
     assigneeId:
       pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
       pickFromSources(membershipMember, membership, [
