@@ -30,6 +30,8 @@ type TaskItem = {
   point?: string;
   description?: string;
   createdAt?: string;
+  assignmentId?: string;
+  assignmentStatus?: string;
   sourceIndex: number;
 };
 
@@ -441,6 +443,13 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
           name: pickFromSources(candidateMember, membership, [
             "name",
             "member_name",
+            "user_name",
+            "username",
+            "display_name",
+            "displayName",
+            "full_name",
+            "fullName",
+            "nickname",
           ]),
           email: pickFromSources(candidateMember, membership, [
             "email",
@@ -612,7 +621,11 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
         "membershipId",
       ]) ??
       pickFromSources(membership, membershipRoot, ["id", "membership_id"]),
-    status: pickFromSources(assignment, assignmentRoot, ["status", "state"]),
+    status: pickFromSources(assignment, assignmentRoot, [
+      "status",
+      "state",
+      "comment",
+    ]),
     createdAt: pickFromSources(assignment, assignmentRoot, [
       "created_at",
       "createdAt",
@@ -646,8 +659,20 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
         "executor_id",
       ]),
     assigneeName:
-      pickFromSources(assignee, assignment, ["name", "user_name"]) ??
-      pickFromSources(membershipMember, membership, ["name", "user_name"]),
+      pickFromSources(assignee, assignment, [
+        "name",
+        "user_name",
+        "username",
+        "display_name",
+        "displayName",
+      ]) ??
+      pickFromSources(membershipMember, membership, [
+        "name",
+        "user_name",
+        "username",
+        "display_name",
+        "displayName",
+      ]),
     assigneeEmail:
       pickFromSources(assignee, assignment, ["email", "mail"]) ??
       pickFromSources(membershipMember, membership, ["email", "mail"]),
@@ -772,7 +797,17 @@ const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
       "userId",
       "member_id",
     ]),
-    name: pickFromSources(user, userRoot, ["name", "user_name", "member_name"]),
+    name: pickFromSources(user, userRoot, [
+      "name",
+      "user_name",
+      "member_name",
+      "username",
+      "display_name",
+      "displayName",
+      "full_name",
+      "fullName",
+      "nickname",
+    ]),
     email: pickFromSources(user, userRoot, ["email", "mail", "member_email"]),
   };
 };
@@ -912,6 +947,8 @@ export default async function Home() {
         return {
           rows: [] as DashboardTaskRow[],
           assignedToCurrentCount: 0,
+          completedToCurrentCount: 0,
+          inProgressToCurrentCount: 0,
         };
       }
 
@@ -937,9 +974,8 @@ export default async function Home() {
 
       const tasks = extractTasksArray(tasksPayload).map(normalizeTask);
       const tasksForAssignBase = sortTasksForAssignment(tasks);
-      const assignments = extractAssignmentsArray(assignmentsPayload).map(
-        normalizeAssignment,
-      );
+      const assignments =
+        extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment);
       const taskById = new Map(
         tasks
           .filter((task) => task.id)
@@ -976,29 +1012,79 @@ export default async function Home() {
         isSameMember(member, currentUser),
       );
       const groupKey = group.id ?? group.name;
-      const assignedToCurrentCount =
+      const progressCounts =
         currentUserIndex < 0
-          ? 0
-          : tasksForAssign.reduce((count, task) => {
-              const selected = selectLatestAssignmentForTask(
-                task,
-                assignments,
-                membersForAssign,
-                todayKey,
+          ? {
+              assignedToCurrentCount: 0,
+              completedToCurrentCount: 0,
+              inProgressToCurrentCount: 0,
+            }
+          : (() => {
+              const tasksWithAssignment = tasksForAssign.map((task) => {
+                const selected = selectLatestAssignmentForTask(
+                  task,
+                  assignments,
+                  membersForAssign,
+                  todayKey,
+                );
+
+                if (!selected) {
+                  return task;
+                }
+
+                return {
+                  ...task,
+                  assignmentId: selected.assignment.id ?? task.assignmentId,
+                  assignmentStatus:
+                    selected.assignment.status ?? task.assignmentStatus,
+                };
+              });
+
+              return tasksWithAssignment.reduce(
+              (acc, task) => {
+                const selected = selectLatestAssignmentForTask(
+                  task,
+                  assignments,
+                  membersForAssign,
+                  todayKey,
+                );
+                const fallbackAssigneeIndex = fallbackAssigneeIndexForTask(
+                  task,
+                  membersForAssign.length,
+                  group.assignMode,
+                  groupKey,
+                  todayKey,
+                );
+                const finalAssigneeIndex =
+                  selected?.assigneeIndex ?? fallbackAssigneeIndex;
+
+                if (finalAssigneeIndex !== currentUserIndex) {
+                  return acc;
+                }
+
+                acc.assignedToCurrentCount += 1;
+
+                const status = normalizeText(task.assignmentStatus);
+                if (isCompletedStatus(status)) {
+                  acc.completedToCurrentCount += 1;
+                } else if (
+                  status === "in_progress" ||
+                  status === "in progress" ||
+                  status === "doing" ||
+                  status === "進行中"
+                ) {
+                  acc.inProgressToCurrentCount += 1;
+                }
+
+                return acc;
+              },
+              {
+                assignedToCurrentCount: 0,
+                completedToCurrentCount: 0,
+                inProgressToCurrentCount: 0,
+              },
               );
-              const fallbackAssigneeIndex = fallbackAssigneeIndexForTask(
-                task,
-                membersForAssign.length,
-                group.assignMode,
-                groupKey,
-                todayKey,
-              );
-              const finalAssigneeIndex =
-                selected?.assigneeIndex ?? fallbackAssigneeIndex;
-              return finalAssigneeIndex === currentUserIndex
-                ? count + 1
-                : count;
-            }, 0);
+            })();
 
       const groupMemberships = memberships.filter((membership) =>
         membershipBelongsToGroup(membership, group),
@@ -1020,55 +1106,54 @@ export default async function Home() {
           ]),
       );
 
-      const rows = assignments
-        .map((assignment): DashboardTaskRow => {
-          const memberFromMembership = assignment.membershipId
-            ? (memberByMembershipId.get(
-                normalizeText(assignment.membershipId),
-              ) ??
-              globalMemberByMembershipId.get(
-                normalizeText(assignment.membershipId),
-              ))
-            : undefined;
-          const memberFromAssigneeId = assignment.assigneeId
-            ? (memberByUserId.get(normalizeText(assignment.assigneeId)) ??
-              globalMemberByUserId.get(normalizeText(assignment.assigneeId)))
-            : undefined;
+      const rows = assignments.map((assignment): DashboardTaskRow => {
+        const memberFromMembership = assignment.membershipId
+          ? (memberByMembershipId.get(normalizeText(assignment.membershipId)) ??
+            globalMemberByMembershipId.get(
+              normalizeText(assignment.membershipId),
+            ))
+          : undefined;
+        const memberFromAssigneeId = assignment.assigneeId
+          ? (memberByUserId.get(normalizeText(assignment.assigneeId)) ??
+            globalMemberByUserId.get(normalizeText(assignment.assigneeId)))
+          : undefined;
 
-          const assignee: MemberItem = {
-            id:
-              assignment.assigneeId ??
-              memberFromMembership?.id ??
-              memberFromAssigneeId?.id,
-            name:
-              assignment.assigneeName ??
-              memberFromMembership?.name ??
-              memberFromAssigneeId?.name,
-            email:
-              assignment.assigneeEmail ??
-              memberFromMembership?.email ??
-              memberFromAssigneeId?.email,
-          };
+        const assignee: MemberItem = {
+          id:
+            assignment.assigneeId ??
+            memberFromMembership?.id ??
+            memberFromAssigneeId?.id,
+          name:
+            assignment.assigneeName ??
+            memberFromMembership?.name ??
+            memberFromAssigneeId?.name,
+          email:
+            assignment.assigneeEmail ??
+            memberFromMembership?.email ??
+            memberFromAssigneeId?.email,
+        };
 
-          const task = taskById.get(normalizeText(assignment.taskId)) ?? {
-            id: assignment.taskId,
-            name: assignment.taskName ?? "タスク",
-            point: assignment.taskPoint,
-            description: assignment.taskDescription,
-            sourceIndex: -1,
-          };
+        const task = taskById.get(normalizeText(assignment.taskId)) ?? {
+          id: assignment.taskId,
+          name: assignment.taskName ?? "タスク",
+          point: assignment.taskPoint,
+          description: assignment.taskDescription,
+          sourceIndex: -1,
+        };
 
-          return {
-            group,
-            assignment,
-            task,
-            assignee,
-          };
-        });
+        return {
+          group,
+          assignment,
+          task,
+          assignee,
+        };
+      });
 
       return {
         rows,
-        assignedToCurrentCount,
+        assignedToCurrentCount: progressCounts.assignedToCurrentCount,
+        completedToCurrentCount: progressCounts.completedToCurrentCount,
+        inProgressToCurrentCount: progressCounts.inProgressToCurrentCount,
       };
     }),
   );
@@ -1076,6 +1161,14 @@ export default async function Home() {
   const allRows = groupTaskRows.flatMap((group) => group.rows);
   const totalAssigned = groupTaskRows.reduce(
     (sum, group) => sum + group.assignedToCurrentCount,
+    0,
+  );
+  const completedAssigned = groupTaskRows.reduce(
+    (sum, group) => sum + group.completedToCurrentCount,
+    0,
+  );
+  const inProgressAssigned = groupTaskRows.reduce(
+    (sum, group) => sum + group.inProgressToCurrentCount,
     0,
   );
 
@@ -1154,19 +1247,8 @@ export default async function Home() {
     }));
 
   const totalMine = totalAssigned;
-  const completedMine = myRows.filter(({ assignment }) =>
-    isCompletedAssignment(assignment),
-  ).length;
-  const inProgressMine = myRows.filter(({ assignment }) => {
-    const status = normalizeText(assignment.status);
-    return (
-      !isCompletedAssignment(assignment) &&
-      (status === "in_progress" ||
-        status === "in progress" ||
-        status === "doing" ||
-        status === "進行中")
-    );
-  }).length;
+  const completedMine = completedAssigned;
+  const inProgressMine = inProgressAssigned;
   const todoMine = Math.max(0, totalMine - completedMine - inProgressMine);
   const completionRate =
     totalMine > 0 ? Math.round((completedMine / totalMine) * 100) : 0;
