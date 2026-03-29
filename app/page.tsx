@@ -8,6 +8,7 @@ type GroupItem = {
   id?: string;
   name: string;
   createdAt?: string;
+  assignMode: "manual" | "random" | "balanced" | "";
 };
 
 type MemberItem = {
@@ -29,6 +30,7 @@ type TaskItem = {
   point?: string;
   description?: string;
   createdAt?: string;
+  sourceIndex: number;
 };
 
 type AssignmentItem = {
@@ -46,6 +48,8 @@ type AssignmentItem = {
   assigneeId?: string;
   assigneeName?: string;
   assigneeEmail?: string;
+  targetDate?: string;
+  updatedAt?: string;
   evaluationId?: string;
   evaluationScore?: string;
   evaluationComment?: string;
@@ -115,6 +119,174 @@ const toTimestamp = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 };
 
+const todayYmd = () => new Date().toISOString().slice(0, 10);
+
+const normalizeAssignMode = (
+  value?: string,
+): "manual" | "random" | "balanced" | "" => {
+  const normalized = normalizeText(value);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.includes("バランス") || normalized.includes("balanced")) {
+    return "balanced";
+  }
+  if (normalized.includes("random") || normalized.includes("ランダム")) {
+    return "random";
+  }
+  if (normalized.includes("manual") || normalized.includes("手動")) {
+    return "manual";
+  }
+
+  return "";
+};
+
+const isSameDay = (isoLike?: string, ymd?: string) => {
+  if (!isoLike || !ymd) {
+    return false;
+  }
+  return isoLike.slice(0, 10) === ymd;
+};
+
+const sortTasksForAssignment = (tasks: TaskItem[]) => {
+  return [...tasks].sort((a, b) => {
+    const aTime = a.createdAt ? Date.parse(a.createdAt) : Number.NaN;
+    const bTime = b.createdAt ? Date.parse(b.createdAt) : Number.NaN;
+
+    const aValid = Number.isFinite(aTime);
+    const bValid = Number.isFinite(bTime);
+
+    if (aValid && bValid && aTime !== bTime) {
+      return aTime - bTime;
+    }
+
+    return a.sourceIndex - b.sourceIndex;
+  });
+};
+
+const selectLatestAssignmentForTask = (
+  task: TaskItem,
+  assignments: AssignmentItem[],
+  membersForAssign: MemberItem[],
+  todayKey: string,
+) => {
+  const taskIdNormalized = normalizeText(task.id);
+  if (!taskIdNormalized) {
+    return undefined;
+  }
+
+  const candidates = assignments
+    .filter(
+      (assignment) => normalizeText(assignment.taskId) === taskIdNormalized,
+    )
+    .map((assignment) => {
+      const assigneeIndex = membersForAssign.findIndex((member) =>
+        isSameMember(member, {
+          id: assignment.assigneeId,
+          name: assignment.assigneeName,
+          email: assignment.assigneeEmail,
+        }),
+      );
+
+      return {
+        assignment,
+        assigneeIndex,
+      };
+    })
+    .filter((row) => row.assigneeIndex >= 0);
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  const sorted = [...candidates].sort((a, b) => {
+    const aToday = isSameDay(a.assignment.targetDate, todayKey) ? 1 : 0;
+    const bToday = isSameDay(b.assignment.targetDate, todayKey) ? 1 : 0;
+    if (aToday !== bToday) {
+      return bToday - aToday;
+    }
+
+    const aTime = a.assignment.updatedAt
+      ? Date.parse(a.assignment.updatedAt)
+      : Number.NaN;
+    const bTime = b.assignment.updatedAt
+      ? Date.parse(b.assignment.updatedAt)
+      : Number.NaN;
+    const aValid = Number.isFinite(aTime);
+    const bValid = Number.isFinite(bTime);
+
+    if (aValid && bValid && aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    return 0;
+  });
+
+  return sorted[0];
+};
+
+const sortMembersStable = (members: MemberItem[]) => {
+  return [...members].sort((a, b) => {
+    const aKey = `${normalizeText(a.id)}|${normalizeText(a.email)}|${normalizeText(a.name)}`;
+    const bKey = `${normalizeText(b.id)}|${normalizeText(b.email)}|${normalizeText(b.name)}`;
+    return aKey.localeCompare(bKey, "ja");
+  });
+};
+
+const hashString = (value: string) => {
+  let hash = 2166136261;
+
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+};
+
+const createRng = (seed: number) => {
+  let x = seed || 1;
+
+  return () => {
+    x = (Math.imul(1664525, x) + 1013904223) >>> 0;
+    return x / 4294967296;
+  };
+};
+
+const shuffleWithSeed = <T,>(items: T[], seedKey: string): T[] => {
+  const next = [...items];
+  const rng = createRng(hashString(seedKey));
+
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
+  }
+
+  return next;
+};
+
+const fallbackAssigneeIndexForTask = (
+  task: TaskItem,
+  memberCount: number,
+  mode: GroupItem["assignMode"],
+  groupKey: string,
+  todayKey: string,
+) => {
+  if (memberCount <= 0) {
+    return 0;
+  }
+
+  const taskKey = task.id ?? `${task.name}:${task.sourceIndex}`;
+  const seedKey =
+    mode === "random"
+      ? `${todayKey}:${groupKey}:${taskKey}`
+      : `${groupKey}:${taskKey}`;
+
+  return hashString(seedKey) % memberCount;
+};
+
 const extractGroupsArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
@@ -171,7 +343,14 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
 
       const key = id ? `id:${id}` : `name:${name}`;
       if (!map.has(key)) {
-        map.set(key, { id, name, createdAt });
+        map.set(key, {
+          id,
+          name,
+          createdAt,
+          assignMode: normalizeAssignMode(
+            pickFromSources(group, base, ["assign_mode", "assignMode", "mode"]),
+          ),
+        });
       }
     }
   }
@@ -326,6 +505,7 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
       "memo",
     ]),
     createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
+    sourceIndex: index,
   };
 };
 
@@ -471,6 +651,18 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
     assigneeEmail:
       pickFromSources(assignee, assignment, ["email", "mail"]) ??
       pickFromSources(membershipMember, membership, ["email", "mail"]),
+    targetDate: pickFromSources(assignment, assignmentRoot, [
+      "date",
+      "target_date",
+      "assigned_date",
+      "work_date",
+    ]),
+    updatedAt: pickFromSources(assignment, assignmentRoot, [
+      "updated_at",
+      "updatedAt",
+      "created_at",
+      "createdAt",
+    ]),
     evaluationId: pickFromSources(evaluation, evaluationRoot, [
       "id",
       "evaluation_id",
@@ -717,7 +909,10 @@ export default async function Home() {
   const groupTaskRows = await Promise.all(
     groups.map(async (group) => {
       if (!group.id) {
-        return [] as DashboardTaskRow[];
+        return {
+          rows: [] as DashboardTaskRow[],
+          assignedToCurrentCount: 0,
+        };
       }
 
       const tasksPayload = await fetchFirstOkJson(
@@ -741,11 +936,69 @@ export default async function Home() {
       );
 
       const tasks = extractTasksArray(tasksPayload).map(normalizeTask);
+      const tasksForAssignBase = sortTasksForAssignment(tasks);
+      const assignments = extractAssignmentsArray(assignmentsPayload).map(
+        normalizeAssignment,
+      );
       const taskById = new Map(
         tasks
           .filter((task) => task.id)
           .map((task) => [normalizeText(task.id), task]),
       );
+
+      const membersInGroup = uniqueMembers(
+        memberships
+          .filter((membership) => membershipBelongsToGroup(membership, group))
+          .map((membership) => membership.member),
+      );
+      const members = uniqueMembers(
+        membersInGroup.length > 0
+          ? [...membersInGroup, currentUser]
+          : [currentUser],
+      );
+      const todayKey = todayYmd();
+      const sortedMembers = sortMembersStable(members);
+      const membersForAssign =
+        group.assignMode === "random"
+          ? shuffleWithSeed(
+              sortedMembers,
+              `${todayKey}:members:${group.id ?? group.name}`,
+            )
+          : sortedMembers;
+      const tasksForAssign =
+        group.assignMode === "random"
+          ? shuffleWithSeed(
+              tasksForAssignBase,
+              `${todayKey}:tasks:${group.id ?? group.name}`,
+            )
+          : tasksForAssignBase;
+      const currentUserIndex = membersForAssign.findIndex((member) =>
+        isSameMember(member, currentUser),
+      );
+      const groupKey = group.id ?? group.name;
+      const assignedToCurrentCount =
+        currentUserIndex < 0
+          ? 0
+          : tasksForAssign.reduce((count, task) => {
+              const selected = selectLatestAssignmentForTask(
+                task,
+                assignments,
+                membersForAssign,
+                todayKey,
+              );
+              const fallbackAssigneeIndex = fallbackAssigneeIndexForTask(
+                task,
+                membersForAssign.length,
+                group.assignMode,
+                groupKey,
+                todayKey,
+              );
+              const finalAssigneeIndex =
+                selected?.assigneeIndex ?? fallbackAssigneeIndex;
+              return finalAssigneeIndex === currentUserIndex
+                ? count + 1
+                : count;
+            }, 0);
 
       const groupMemberships = memberships.filter((membership) =>
         membershipBelongsToGroup(membership, group),
@@ -767,8 +1020,7 @@ export default async function Home() {
           ]),
       );
 
-      return extractAssignmentsArray(assignmentsPayload)
-        .map(normalizeAssignment)
+      const rows = assignments
         .map((assignment): DashboardTaskRow => {
           const memberFromMembership = assignment.membershipId
             ? (memberByMembershipId.get(
@@ -803,6 +1055,7 @@ export default async function Home() {
             name: assignment.taskName ?? "タスク",
             point: assignment.taskPoint,
             description: assignment.taskDescription,
+            sourceIndex: -1,
           };
 
           return {
@@ -812,10 +1065,19 @@ export default async function Home() {
             assignee,
           };
         });
+
+      return {
+        rows,
+        assignedToCurrentCount,
+      };
     }),
   );
 
-  const allRows = groupTaskRows.flat();
+  const allRows = groupTaskRows.flatMap((group) => group.rows);
+  const totalAssigned = groupTaskRows.reduce(
+    (sum, group) => sum + group.assignedToCurrentCount,
+    0,
+  );
 
   const myRows = allRows.filter(({ assignment, assignee }) => {
     const membershipId = normalizeText(assignment.membershipId);
@@ -891,7 +1153,7 @@ export default async function Home() {
       ),
     }));
 
-  const totalMine = myRows.length;
+  const totalMine = totalAssigned;
   const completedMine = myRows.filter(({ assignment }) =>
     isCompletedAssignment(assignment),
   ).length;
@@ -945,7 +1207,7 @@ export default async function Home() {
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border bg-card p-4">
           <p className="text-xs text-slate-500">自分の担当タスク</p>
-          <p className="mt-2 text-3xl font-bold">{totalMine}</p>
+          <p className="mt-2 text-3xl font-bold">{totalAssigned}</p>
         </div>
         <div className="rounded-xl border bg-card p-4">
           <p className="text-xs text-slate-500">完了</p>
