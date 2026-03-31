@@ -7,6 +7,7 @@ type ContactPayload = {
   message?: string;
 };
 
+// メールアドレスのバリデーション
 const isValidEmail = (value: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 };

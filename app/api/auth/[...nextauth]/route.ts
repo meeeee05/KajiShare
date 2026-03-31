@@ -1,3 +1,4 @@
+// NextAuthのAPIルート
 import { handlers } from "@/auth";
 
 //セグメントの拡張
