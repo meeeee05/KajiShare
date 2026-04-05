@@ -63,6 +63,12 @@ type DashboardTaskRow = {
   assignee: MemberItem;
 };
 
+type TaskStatusCounts = {
+  notStarted: number;
+  inProgress: number;
+  completed: number;
+};
+
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
 const asRecord = (value: unknown): AnyRecord | null => {
@@ -109,6 +115,138 @@ const firstArray = (...values: unknown[]): unknown[] => {
     }
   }
   return [];
+};
+
+const toNonNegativeInt = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.trunc(value));
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.trunc(parsed));
+    }
+  }
+  return undefined;
+};
+
+const collectObjectRecords = (value: unknown, bucket: AnyRecord[]) => {
+  const record = asRecord(value);
+  if (!record) {
+    return;
+  }
+
+  bucket.push(record);
+  for (const child of Object.values(record)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        collectObjectRecords(item, bucket);
+      }
+      continue;
+    }
+    collectObjectRecords(child, bucket);
+  }
+};
+
+const normalizeCountKey = (key: string) =>
+  normalizeText(key).replace(/[\s-]/g, "");
+
+const extractTaskStatusCounts = (payload: unknown): TaskStatusCounts | null => {
+  const records: AnyRecord[] = [];
+  collectObjectRecords(payload, records);
+
+  let best: (TaskStatusCounts & { score: number; sum: number }) | null = null;
+
+  for (const record of records) {
+    let notStarted = 0;
+    let inProgress = 0;
+    let completed = 0;
+    let score = 0;
+
+    for (const [key, rawValue] of Object.entries(record)) {
+      const value = toNonNegativeInt(rawValue);
+      if (value === undefined) {
+        continue;
+      }
+
+      const normalizedKey = normalizeCountKey(key);
+
+      if (
+        normalizedKey === "not_started" ||
+        normalizedKey === "notstarted" ||
+        normalizedKey === "todo" ||
+        normalizedKey === "todocount" ||
+        normalizedKey === "pending" ||
+        normalizedKey === "unstarted" ||
+        normalizedKey === "未着手" ||
+        normalizedKey === "着手前"
+      ) {
+        notStarted = value;
+        score += 1;
+        continue;
+      }
+
+      if (
+        normalizedKey === "in_progress" ||
+        normalizedKey === "inprogress" ||
+        normalizedKey === "doing" ||
+        normalizedKey === "working" ||
+        normalizedKey === "進行中"
+      ) {
+        inProgress = value;
+        score += 1;
+        continue;
+      }
+
+      if (
+        normalizedKey === "completed" ||
+        normalizedKey === "completed_assignments" ||
+        normalizedKey === "completedassignment" ||
+        normalizedKey === "completedassignments" ||
+        normalizedKey === "completed_count" ||
+        normalizedKey === "completedcount" ||
+        normalizedKey === "complete" ||
+        normalizedKey === "done" ||
+        normalizedKey === "finished" ||
+        normalizedKey === "完了" ||
+        normalizedKey === "完了済み" ||
+        normalizedKey === "済"
+      ) {
+        completed = value;
+        score += 1;
+      }
+    }
+
+    if (score === 0) {
+      continue;
+    }
+
+    const candidate = {
+      notStarted,
+      inProgress,
+      completed,
+      score,
+      sum: notStarted + inProgress + completed,
+    };
+
+    if (
+      !best ||
+      candidate.score > best.score ||
+      (candidate.score === best.score && candidate.sum > best.sum)
+    ) {
+      best = candidate;
+    }
+  }
+
+  if (!best) {
+    return null;
+  }
+
+  return {
+    notStarted: best.notStarted,
+    inProgress: best.inProgress,
+    completed: best.completed,
+  };
 };
 
 const toTimestamp = (value?: string) => {
@@ -931,6 +1069,7 @@ export default async function Home() {
         return {
           rows: [] as DashboardTaskRow[],
           assignedToCurrentCount: 0,
+          serializerStatusCounts: null as TaskStatusCounts | null,
         };
       }
 
@@ -954,7 +1093,55 @@ export default async function Home() {
         fetchOkJson,
       );
 
-      const tasks = extractTasksArray(tasksPayload).map(normalizeTask);
+      const taskRows = extractTasksArray(tasksPayload);
+      const tasks = taskRows.map(normalizeTask);
+      const completedAssignmentsFromTaskRows: number = taskRows.reduce<number>(
+        (sum, row) => {
+          const root = asRecord(row);
+          const taskRoot = asRecord(root?.task) ?? root;
+          const task = unwrapEntity(taskRoot);
+
+          const value =
+            toNonNegativeInt(
+              pickFromSources(task, taskRoot, [
+                "completed_assignments",
+                "completedAssignments",
+                "completed_count",
+                "completedCount",
+              ]),
+            ) ??
+            toNonNegativeInt(
+              pickFirstString(root, [
+                "completed_assignments",
+                "completedAssignments",
+                "completed_count",
+                "completedCount",
+              ]),
+            ) ??
+            0;
+
+          return sum + value;
+        },
+        0,
+      );
+
+      const serializerStatusBase = extractTaskStatusCounts(tasksPayload);
+      const serializerStatusCounts: TaskStatusCounts | null =
+        serializerStatusBase
+        ? {
+            ...serializerStatusBase,
+            completed: Math.max(
+              serializerStatusBase.completed,
+              completedAssignmentsFromTaskRows,
+            ),
+          }
+        : completedAssignmentsFromTaskRows > 0
+          ? {
+              notStarted: 0,
+              inProgress: 0,
+              completed: completedAssignmentsFromTaskRows,
+            }
+          : null;
       const tasksForAssignBase = sortTasksForAssignment(tasks);
       const assignments =
         extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment);
@@ -1084,6 +1271,7 @@ export default async function Home() {
       return {
         rows,
         assignedToCurrentCount,
+        serializerStatusCounts,
       };
     }),
   );
@@ -1168,11 +1356,31 @@ export default async function Home() {
       ),
     }));
 
-  const totalMine = totalAssigned;
-  const completedMine = myRows.filter(({ assignment }) =>
-    isCompletedAssignment(assignment),
-  ).length;
-  const inProgressMine = myRows.filter(({ assignment }) => {
+  const serializerStatusTotals = groupTaskRows.reduce(
+    (sum, group) => {
+      if (!group.serializerStatusCounts) {
+        return sum;
+      }
+      return {
+        notStarted: sum.notStarted + group.serializerStatusCounts.notStarted,
+        inProgress: sum.inProgress + group.serializerStatusCounts.inProgress,
+        completed: sum.completed + group.serializerStatusCounts.completed,
+        available: true,
+      };
+    },
+    {
+      notStarted: 0,
+      inProgress: 0,
+      completed: 0,
+      available: false,
+    },
+  );
+
+  const completedFromMyRows = myRows.filter(({ assignment }) => {
+    const status = normalizeText(assignment.status);
+    return status === "completed";
+  }).length;
+  const fallbackInProgressMine = myRows.filter(({ assignment }) => {
     const status = normalizeText(assignment.status);
     return (
       !isCompletedAssignment(assignment) &&
@@ -1182,7 +1390,21 @@ export default async function Home() {
         status === "進行中")
     );
   }).length;
-  const todoMine = Math.max(0, totalMine - completedMine - inProgressMine);
+  const fallbackTodoMine = Math.max(
+    0,
+    totalAssigned - completedFromMyRows - fallbackInProgressMine,
+  );
+
+  const completedMine = serializerStatusTotals.available
+    ? serializerStatusTotals.completed
+    : completedFromMyRows;
+  const inProgressMine = serializerStatusTotals.available
+    ? serializerStatusTotals.inProgress
+    : fallbackInProgressMine;
+  const todoMine = serializerStatusTotals.available
+    ? serializerStatusTotals.notStarted
+    : fallbackTodoMine;
+  const totalMine = completedMine + inProgressMine + todoMine;
   const completionRate =
     totalMine > 0 ? Math.round((completedMine / totalMine) * 100) : 0;
 
