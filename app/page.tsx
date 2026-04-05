@@ -188,6 +188,11 @@ const extractTaskStatusCounts = (payload: unknown): TaskStatusCounts | null => {
 
       if (
         normalizedKey === "in_progress" ||
+        normalizedKey === "in_progress_assignments" ||
+        normalizedKey === "inprogressassignment" ||
+        normalizedKey === "inprogressassignments" ||
+        normalizedKey === "in_progress_count" ||
+        normalizedKey === "inprogresscount" ||
         normalizedKey === "inprogress" ||
         normalizedKey === "doing" ||
         normalizedKey === "working" ||
@@ -1125,20 +1130,55 @@ export default async function Home() {
         0,
       );
 
+      const inProgressAssignmentsFromTaskRows: number = taskRows.reduce<number>(
+        (sum, row) => {
+          const root = asRecord(row);
+          const taskRoot = asRecord(root?.task) ?? root;
+          const task = unwrapEntity(taskRoot);
+
+          const value =
+            toNonNegativeInt(
+              pickFromSources(task, taskRoot, [
+                "in_progress_assignments",
+                "inProgressAssignments",
+                "in_progress_count",
+                "inProgressCount",
+              ]),
+            ) ??
+            toNonNegativeInt(
+              pickFirstString(root, [
+                "in_progress_assignments",
+                "inProgressAssignments",
+                "in_progress_count",
+                "inProgressCount",
+              ]),
+            ) ??
+            0;
+
+          return sum + value;
+        },
+        0,
+      );
+
       const serializerStatusBase = extractTaskStatusCounts(tasksPayload);
       const serializerStatusCounts: TaskStatusCounts | null =
         serializerStatusBase
         ? {
             ...serializerStatusBase,
+            inProgress: Math.max(
+              serializerStatusBase.inProgress,
+              inProgressAssignmentsFromTaskRows,
+            ),
             completed: Math.max(
               serializerStatusBase.completed,
               completedAssignmentsFromTaskRows,
             ),
           }
-        : completedAssignmentsFromTaskRows > 0
+        : completedAssignmentsFromTaskRows > 0 ||
+            inProgressAssignmentsFromTaskRows > 0
           ? {
               notStarted: 0,
-              inProgress: 0,
+              inProgress: inProgressAssignmentsFromTaskRows,
               completed: completedAssignmentsFromTaskRows,
             }
           : null;
