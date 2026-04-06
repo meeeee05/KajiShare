@@ -61,7 +61,6 @@ const toCanonicalStatus = (value?: string): CanonicalStatus => {
     normalized === "pending" ||
     normalized === "todo" ||
     normalized === "open" ||
-    normalized === "未着手" ||
     normalized === "着手前" ||
     normalized === ""
   ) {

@@ -233,7 +233,6 @@ const extractTaskStatusCounts = (payload: unknown): TaskStatusCounts | null => {
         normalizedKey === "todocount" ||
         normalizedKey === "pending" ||
         normalizedKey === "unstarted" ||
-        normalizedKey === "未着手" ||
         normalizedKey === "着手前"
       ) {
         notStarted = value;
@@ -1153,7 +1152,6 @@ const isNotStartedStatus = (status?: string) => {
     normalized === "todo" ||
     normalized === "pending" ||
     normalized === "unstarted" ||
-    normalized === "未着手" ||
     normalized === "着手前"
   );
 };
@@ -1585,9 +1583,7 @@ export default async function Home() {
                 "notStartedAssignments",
                 "not_started_count",
                 "notStartedCount",
-                "未着手_assignments",
                 "着手前_assignments",
-                "未着手_count",
                 "着手前_count",
               ]),
             ) ??
@@ -1597,9 +1593,7 @@ export default async function Home() {
                 "notStartedAssignments",
                 "not_started_count",
                 "notStartedCount",
-                "未着手_assignments",
                 "着手前_assignments",
-                "未着手_count",
                 "着手前_count",
               ]),
             ) ??
@@ -2049,25 +2043,17 @@ export default async function Home() {
       ),
     }));
 
-  const completedFromMyRows = myRows.filter(({ assignment }) =>
-    isCompletedAssignment(assignment),
+  const completedMine = myTaskCards.filter(
+    ({ myStatus }) => myStatus === "完了",
   ).length;
-  const fallbackInProgressMine = myRows.filter(({ assignment }) => {
-    return (
-      !isCompletedAssignment(assignment) &&
-      isInProgressStatus(assignment.status)
-    );
-  }).length;
-  const fallbackTodoMine = myRows.filter(({ assignment }) => {
-    return (
-      !isCompletedAssignment(assignment) &&
-      isNotStartedStatus(assignment.status)
-    );
-  }).length;
-
-  const completedMine = completedFromMyRows;
-  const inProgressMine = fallbackInProgressMine;
-  const todoMine = fallbackTodoMine;
+  const inProgressMine = myTaskCards.filter(
+    ({ myStatus }) => myStatus === "進行中",
+  ).length;
+  const todoMine = myTaskCards.filter(
+    ({ myStatus, myAssignment }) =>
+      myStatus === "着手前" ||
+      normalizeText(myAssignment?.status) === "着手前",
+  ).length;
   const totalMine = completedMine + inProgressMine + todoMine;
   const completionRate =
     totalMine > 0 ? Math.round((completedMine / totalMine) * 100) : 0;
@@ -2101,7 +2087,7 @@ export default async function Home() {
           </p>
         </div>
         <div className="rounded-xl border bg-card p-4">
-          <p className="text-xs text-slate-500">未着手</p>
+          <p className="text-xs text-slate-500">着手前</p>
           <p className="mt-2 text-3xl font-bold text-amber-600">{todoMine}</p>
         </div>
       </section>
@@ -2123,7 +2109,7 @@ export default async function Home() {
           {[
             { label: "完了", value: completedMine, color: "bg-emerald-500" },
             { label: "進行中", value: inProgressMine, color: "bg-blue-500" },
-            { label: "未着手", value: todoMine, color: "bg-amber-500" },
+            { label: "着手前", value: todoMine, color: "bg-amber-500" },
           ].map((item) => {
             const ratio =
               totalMine > 0 ? Math.round((item.value / totalMine) * 100) : 0;
@@ -2223,7 +2209,7 @@ export default async function Home() {
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
-                        未着手 {summary.notStarted}
+                        着手前 {summary.notStarted}
                       </span>
                       <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
                         進行中 {summary.inProgress}
