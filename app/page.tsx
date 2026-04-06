@@ -30,6 +30,9 @@ type TaskItem = {
   point?: string;
   description?: string;
   createdAt?: string;
+  notStartedAssignments?: number;
+  inProgressAssignments?: number;
+  completedAssignments?: number;
   sourceIndex: number;
 };
 
@@ -67,6 +70,18 @@ type TaskStatusCounts = {
   notStarted: number;
   inProgress: number;
   completed: number;
+};
+
+type MyTaskStatus = "未アサイン" | "着手前" | "進行中" | "完了";
+
+type TaskCardItem = {
+  group: GroupItem;
+  task: TaskItem;
+  summary: TaskStatusCounts;
+  myStatus: MyTaskStatus;
+  myAssignment?: AssignmentItem;
+  debugSummarySource: "serializer" | "rows" | "empty";
+  debugMySource: "membership" | "assignee" | "none";
 };
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -107,6 +122,41 @@ const pickFromSources = (
   sourceB: AnyRecord | null,
   keys: string[],
 ) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
+
+const pickRelationshipId = (
+  source: AnyRecord | null,
+  relationshipNames: string[],
+): string | undefined => {
+  const relationships = asRecord(source?.relationships);
+  if (!relationships) {
+    return undefined;
+  }
+
+  for (const relationshipName of relationshipNames) {
+    const relationship = asRecord(relationships[relationshipName]);
+    if (!relationship) {
+      continue;
+    }
+
+    const relationshipData = relationship.data;
+    if (Array.isArray(relationshipData)) {
+      for (const item of relationshipData) {
+        const id = pickFirstString(asRecord(item), ["id"]);
+        if (id) {
+          return id;
+        }
+      }
+      continue;
+    }
+
+    const id = pickFirstString(asRecord(relationshipData), ["id"]);
+    if (id) {
+      return id;
+    }
+  }
+
+  return undefined;
+};
 
 const firstArray = (...values: unknown[]): unknown[] => {
   for (const value of values) {
@@ -173,6 +223,11 @@ const extractTaskStatusCounts = (payload: unknown): TaskStatusCounts | null => {
 
       if (
         normalizedKey === "not_started" ||
+        normalizedKey === "not_started_assignments" ||
+        normalizedKey === "notstartedassignment" ||
+        normalizedKey === "notstartedassignments" ||
+        normalizedKey === "not_started_count" ||
+        normalizedKey === "notstartedcount" ||
         normalizedKey === "notstarted" ||
         normalizedKey === "todo" ||
         normalizedKey === "todocount" ||
@@ -545,12 +600,14 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
     for (const row of extractMembershipsArray(payload)) {
       const membershipRoot = asRecord(row);
       const membership = unwrapEntity(membershipRoot);
+      const membershipSource = membershipRoot ?? membership;
       const group =
         unwrapEntity(asRecord(membershipRoot?.group)) ??
         unwrapEntity(asRecord(membership?.group));
 
       const groupId =
         pickFromSources(group, membership, ["id", "group_id", "groupId"]) ??
+        pickRelationshipId(membershipSource, ["group", "groups"]) ??
         pickFirstString(membershipRoot, ["group_id", "groupId"]);
       const groupName =
         pickFromSources(group, membership, ["name", "group_name"]) ??
@@ -579,6 +636,11 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
               "member_id",
               "user_id",
               "userId",
+            ]) ??
+            pickRelationshipId(membershipSource, [
+              "member",
+              "user",
+              "account",
             ]) ??
             pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
           name:
@@ -661,6 +723,57 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
       "memo",
     ]),
     createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
+    notStartedAssignments:
+      toNonNegativeInt(
+        pickFromSources(task, taskRoot, [
+          "not_started_assignments",
+          "notStartedAssignments",
+          "not_started_count",
+          "notStartedCount",
+        ]),
+      ) ??
+      toNonNegativeInt(
+        pickFirstString(root, [
+          "not_started_assignments",
+          "notStartedAssignments",
+          "not_started_count",
+          "notStartedCount",
+        ]),
+      ),
+    inProgressAssignments:
+      toNonNegativeInt(
+        pickFromSources(task, taskRoot, [
+          "in_progress_assignments",
+          "inProgressAssignments",
+          "in_progress_count",
+          "inProgressCount",
+        ]),
+      ) ??
+      toNonNegativeInt(
+        pickFirstString(root, [
+          "in_progress_assignments",
+          "inProgressAssignments",
+          "in_progress_count",
+          "inProgressCount",
+        ]),
+      ),
+    completedAssignments:
+      toNonNegativeInt(
+        pickFromSources(task, taskRoot, [
+          "completed_assignments",
+          "completedAssignments",
+          "completed_count",
+          "completedCount",
+        ]),
+      ) ??
+      toNonNegativeInt(
+        pickFirstString(root, [
+          "completed_assignments",
+          "completedAssignments",
+          "completed_count",
+          "completedCount",
+        ]),
+      ),
     sourceIndex: index,
   };
 };
@@ -696,6 +809,22 @@ const extractAssignmentsArray = (payload: unknown): unknown[] => {
     return directArray;
   }
 
+  const singleData =
+    asRecord(root.data) ??
+    asRecord(rootData?.data) ??
+    asRecord(rootDataData?.data);
+  if (singleData) {
+    return [singleData];
+  }
+
+  const singleResource =
+    asRecord(root.assignment) ??
+    asRecord(rootData?.assignment) ??
+    asRecord(rootDataData?.assignment);
+  if (singleResource) {
+    return [singleResource];
+  }
+
   return firstArray(
     root.assignment,
     rootData?.assignment,
@@ -707,6 +836,7 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
   const root = asRecord(row);
   const assignmentRoot = asRecord(root?.assignment) ?? root;
   const assignment = unwrapEntity(assignmentRoot);
+  const assignmentSource = assignmentRoot ?? root;
 
   const taskRoot =
     asRecord(assignmentRoot?.task) ??
@@ -750,10 +880,12 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
     id: pickFromSources(assignment, assignmentRoot, ["id", "assignment_id"]),
     groupId:
       pickFromSources(assignment, assignmentRoot, ["group_id", "groupId"]) ??
+      pickRelationshipId(assignmentSource, ["group", "groups"]) ??
       pickFirstString(root, ["group_id", "groupId"]),
     taskId:
       pickFromSources(task, assignment, ["id", "task_id", "taskId"]) ??
       pickFromSources(assignment, assignmentRoot, ["task_id", "taskId"]) ??
+      pickRelationshipId(assignmentSource, ["task", "tasks"]) ??
       pickFirstString(root, ["task_id", "taskId"]),
     taskName: pickFromSources(task, taskRoot, ["name", "title", "task_name"]),
     taskPoint: pickFromSources(task, taskRoot, ["point", "score", "value"]),
@@ -766,8 +898,20 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       pickFromSources(assignment, assignmentRoot, [
         "membership_id",
         "membershipId",
+        "group_membership_id",
+        "groupMembershipId",
       ]) ??
-      pickFromSources(membership, membershipRoot, ["id", "membership_id"]),
+      pickFromSources(membership, membershipRoot, ["id", "membership_id"]) ??
+      pickRelationshipId(assignmentSource, [
+        "membership",
+        "group_membership",
+      ]) ??
+      pickFirstString(root, [
+        "membership_id",
+        "membershipId",
+        "group_membership_id",
+        "groupMembershipId",
+      ]),
     status: pickFromSources(assignment, assignmentRoot, ["status", "state"]),
     createdAt: pickFromSources(assignment, assignmentRoot, [
       "created_at",
@@ -800,14 +944,17 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
         "assignee_id",
         "member_id",
         "executor_id",
+      ]) ??
+      pickRelationshipId(assignmentSource, [
+        "assignee",
+        "user",
+        "member",
+        "executor",
+        "completed_by",
       ]),
     assigneeName:
-      pickFromSources(assignee, assignment, [
-        "name",
-      ]) ??
-      pickFromSources(membershipMember, membership, [
-        "name",
-      ]),
+      pickFromSources(assignee, assignment, ["name"]) ??
+      pickFromSources(membershipMember, membership, ["name"]),
     assigneeEmail:
       pickFromSources(assignee, assignment, ["email", "mail"]) ??
       pickFromSources(membershipMember, membership, ["email", "mail"]),
@@ -846,6 +993,85 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       "updatedAt",
     ]),
   };
+};
+
+const extractAssignmentsFromTaskRows = (
+  taskRows: unknown[],
+  groupId?: string,
+): AssignmentItem[] => {
+  const collected: AssignmentItem[] = [];
+
+  for (const row of taskRows) {
+    const root = asRecord(row);
+    const taskRoot = asRecord(root?.task) ?? root;
+    const task = unwrapEntity(taskRoot);
+
+    const taskId =
+      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
+      pickFirstString(root, ["id", "task_id", "taskId"]);
+    const taskName =
+      pickFromSources(task, taskRoot, ["name", "title", "task_name"]) ??
+      pickFirstString(root, ["name", "title", "task_name"]);
+
+    const nestedAssignments = firstArray(
+      root?.assignments,
+      taskRoot?.assignments,
+      task?.assignments,
+      asRecord(root?.data)?.assignments,
+      asRecord(taskRoot?.data)?.assignments,
+    );
+
+    const nestedSingleAssignment =
+      asRecord(root?.assignment) ??
+      asRecord(taskRoot?.assignment) ??
+      asRecord(task?.assignment) ??
+      asRecord(asRecord(root?.data)?.assignment) ??
+      asRecord(asRecord(taskRoot?.data)?.assignment);
+
+    const rawAssignments = [...nestedAssignments];
+    if (nestedSingleAssignment) {
+      rawAssignments.push(nestedSingleAssignment);
+    }
+
+    for (const rawAssignment of rawAssignments) {
+      const normalized = normalizeAssignment(rawAssignment);
+      collected.push({
+        ...normalized,
+        groupId: normalized.groupId ?? groupId,
+        taskId: normalized.taskId ?? taskId,
+        taskName: normalized.taskName ?? taskName,
+      });
+    }
+  }
+
+  return collected;
+};
+
+const uniqueAssignmentsByKey = (assignments: AssignmentItem[]) => {
+  const map = new Map<string, AssignmentItem>();
+
+  for (const assignment of assignments) {
+    const key =
+      normalizeText(assignment.id) ||
+      [
+        normalizeText(assignment.groupId),
+        normalizeText(assignment.taskId),
+        normalizeText(assignment.membershipId),
+        normalizeText(assignment.assigneeId),
+        normalizeText(assignment.createdAt),
+        normalizeText(assignment.status),
+      ].join("|");
+
+    if (!key) {
+      continue;
+    }
+
+    if (!map.has(key)) {
+      map.set(key, assignment);
+    }
+  }
+
+  return Array.from(map.values());
 };
 
 const isSameMember = (a: MemberItem, b: MemberItem) => {
@@ -908,11 +1134,156 @@ const isCompletedStatus = (status?: string) => {
   );
 };
 
+const isInProgressStatus = (status?: string) => {
+  const normalized = normalizeText(status);
+  return (
+    normalized === "in_progress" ||
+    normalized === "in progress" ||
+    normalized === "doing" ||
+    normalized === "working" ||
+    normalized === "進行中"
+  );
+};
+
+const isNotStartedStatus = (status?: string) => {
+  const normalized = normalizeText(status);
+  return (
+    normalized === "not_started" ||
+    normalized === "not started" ||
+    normalized === "todo" ||
+    normalized === "pending" ||
+    normalized === "unstarted" ||
+    normalized === "未着手" ||
+    normalized === "着手前"
+  );
+};
+
 const isCompletedAssignment = (assignment: AssignmentItem) => {
   return (
     isCompletedStatus(assignment.status) ||
     Boolean((assignment.completedDate ?? "").trim())
   );
+};
+
+const toGroupKey = (groupId?: string, groupName?: string) => {
+  const normalizedId = normalizeText(groupId);
+  if (normalizedId) {
+    return `id:${normalizedId}`;
+  }
+  return `name:${normalizeText(groupName)}`;
+};
+
+const isSameTask = (a: TaskItem, b: TaskItem) => {
+  const aId = normalizeText(a.id);
+  const bId = normalizeText(b.id);
+  if (aId && bId) {
+    return aId === bId;
+  }
+
+  const aName = normalizeText(a.name);
+  const bName = normalizeText(b.name);
+  return Boolean(aName && bName && aName === bName);
+};
+
+const getTaskSummary = (
+  task: TaskItem,
+  assignmentsByTaskId: Map<string, AssignmentItem[]>,
+): TaskStatusCounts => {
+  const hasSerializerCounts =
+    typeof task.notStartedAssignments === "number" ||
+    typeof task.inProgressAssignments === "number" ||
+    typeof task.completedAssignments === "number";
+
+  if (hasSerializerCounts) {
+    return {
+      notStarted: task.notStartedAssignments ?? 0,
+      inProgress: task.inProgressAssignments ?? 0,
+      completed: task.completedAssignments ?? 0,
+    };
+  }
+
+  const taskIdKey = normalizeText(task.id);
+  const taskNameKey = normalizeText(task.name);
+  const assignments =
+    (taskIdKey ? assignmentsByTaskId.get(`id:${taskIdKey}`) : undefined) ??
+    (taskNameKey
+      ? assignmentsByTaskId.get(`name:${taskNameKey}`)
+      : undefined) ??
+    [];
+
+  return assignments.reduce(
+    (sum, assignment) => {
+      if (isCompletedAssignment(assignment)) {
+        return { ...sum, completed: sum.completed + 1 };
+      }
+      if (isInProgressStatus(assignment.status)) {
+        return { ...sum, inProgress: sum.inProgress + 1 };
+      }
+      return { ...sum, notStarted: sum.notStarted + 1 };
+    },
+    { notStarted: 0, inProgress: 0, completed: 0 },
+  );
+};
+
+const getMyAssignment = (
+  task: TaskItem,
+  myMembershipId: string | undefined,
+  assignmentsByTaskId: Map<string, AssignmentItem[]>,
+): AssignmentItem | undefined => {
+  const taskIdKey = normalizeText(task.id);
+  const taskNameKey = normalizeText(task.name);
+  const membershipKey = normalizeText(myMembershipId);
+
+  if (!membershipKey) {
+    return undefined;
+  }
+
+  const assignments =
+    (taskIdKey ? assignmentsByTaskId.get(`id:${taskIdKey}`) : undefined) ??
+    (taskNameKey
+      ? assignmentsByTaskId.get(`name:${taskNameKey}`)
+      : undefined) ??
+    [];
+
+  const mine = assignments.filter(
+    (assignment) => normalizeText(assignment.membershipId) === membershipKey,
+  );
+
+  if (mine.length === 0) {
+    return undefined;
+  }
+
+  return [...mine].sort((a, b) => {
+    const bTime = Math.max(toTimestamp(b.updatedAt), toTimestamp(b.createdAt));
+    const aTime = Math.max(toTimestamp(a.updatedAt), toTimestamp(a.createdAt));
+    return bTime - aTime;
+  })[0];
+};
+
+const getMyTaskStatus = (
+  task: TaskItem,
+  myMembershipId: string | undefined,
+  assignmentsByTaskId: Map<string, AssignmentItem[]>,
+): MyTaskStatus => {
+  const myAssignment = getMyAssignment(
+    task,
+    myMembershipId,
+    assignmentsByTaskId,
+  );
+
+  if (!myAssignment) {
+    return "未アサイン";
+  }
+  if (isCompletedAssignment(myAssignment)) {
+    return "完了";
+  }
+  if (isInProgressStatus(myAssignment.status)) {
+    return "進行中";
+  }
+  if (isNotStartedStatus(myAssignment.status)) {
+    return "着手前";
+  }
+  return "着手前";
 };
 
 const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
@@ -932,9 +1303,7 @@ const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
       "userId",
       "member_id",
     ]),
-    name: pickFromSources(user, userRoot, [
-      "name",
-    ]),
+    name: pickFromSources(user, userRoot, ["name"]),
     email: pickFromSources(user, userRoot, ["email", "mail", "member_email"]),
   };
 };
@@ -943,7 +1312,9 @@ const fetchFirstOkJson = async (
   urls: string[],
   fetchOkJson: (url: string) => Promise<unknown | null>,
 ) => {
-  for (const url of urls) {
+  const uniqueUrls = Array.from(new Set(urls));
+
+  for (const url of uniqueUrls) {
     const data = await fetchOkJson(url);
     if (data != null) {
       return data;
@@ -977,13 +1348,44 @@ export default async function Home() {
         Authorization: `Bearer ${idToken}`,
       },
       cache: "no-store",
-    }).catch(() => null);
+    }).catch((error) => {
+      console.error("[dashboard] fetch failed", {
+        url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
 
     if (!res?.ok) {
+      console.warn("[dashboard] fetch non-ok", {
+        url,
+        status: res?.status ?? "no-response",
+      });
       return null;
     }
 
-    return res.json().catch(() => null);
+    const data = await res.json().catch((error) => {
+      console.error("[dashboard] json parse failed", {
+        url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
+
+    if (
+      url.includes("/tasks") ||
+      url.includes("/assignments") ||
+      url.includes("/memberships")
+    ) {
+      const root = asRecord(data);
+      console.log("[dashboard] fetch ok", {
+        url,
+        topLevelKeys: root ? Object.keys(root).slice(0, 10) : [],
+        isArray: Array.isArray(data),
+      });
+    }
+
+    return data;
   };
 
   const sessionUserId =
@@ -1054,6 +1456,25 @@ export default async function Home() {
       .filter((value) => value.length > 0),
   );
 
+  const membershipsByGroupId = memberships.reduce((map, membership) => {
+    const key = toGroupKey(membership.groupId, membership.groupName);
+    const current = map.get(key) ?? [];
+    current.push(membership);
+    map.set(key, current);
+    return map;
+  }, new Map<string, MembershipItem[]>());
+
+  const myMembershipIdByGroup = new Map<string, string>();
+  membershipsByGroupId.forEach((groupMemberships, groupKey) => {
+    const mine = groupMemberships.find((membership: MembershipItem) =>
+      isSameMember(membership.member, currentUser),
+    );
+    const membershipId = normalizeText(mine?.id);
+    if (membershipId) {
+      myMembershipIdByGroup.set(groupKey, membershipId);
+    }
+  });
+
   const globalMemberByMembershipId = new Map(
     memberships
       .filter((membership) => membership.id)
@@ -1068,13 +1489,19 @@ export default async function Home() {
       ]),
   );
 
-  const groupTaskRows = await Promise.all(
+  const groupTaskRows: {
+    rows: DashboardTaskRow[];
+    assignedToCurrentCount: number;
+    serializerStatusCounts: TaskStatusCounts | null;
+    taskCards: TaskCardItem[];
+  }[] = await Promise.all(
     groups.map(async (group) => {
       if (!group.id) {
         return {
           rows: [] as DashboardTaskRow[],
           assignedToCurrentCount: 0,
           serializerStatusCounts: null as TaskStatusCounts | null,
+          taskCards: [] as TaskCardItem[],
         };
       }
 
@@ -1100,6 +1527,21 @@ export default async function Home() {
 
       const taskRows = extractTasksArray(tasksPayload);
       const tasks = taskRows.map(normalizeTask);
+      const taskIdList = tasks
+        .map((task) => task.id)
+        .filter((taskId): taskId is string => Boolean(taskId));
+
+      const taskAssignmentsPayloads = await Promise.all(
+        taskIdList.map((taskId) =>
+          fetchFirstOkJson(
+            [
+              `${v1Base}/tasks/${encodeURIComponent(taskId)}/assignments`,
+              `${base}/tasks/${encodeURIComponent(taskId)}/assignments`,
+            ],
+            fetchOkJson,
+          ),
+        ),
+      );
       const completedAssignmentsFromTaskRows: number = taskRows.reduce<number>(
         (sum, row) => {
           const root = asRecord(row);
@@ -1121,6 +1563,44 @@ export default async function Home() {
                 "completedAssignments",
                 "completed_count",
                 "completedCount",
+              ]),
+            ) ??
+            0;
+
+          return sum + value;
+        },
+        0,
+      );
+
+      const notStartedAssignmentsFromTaskRows: number = taskRows.reduce<number>(
+        (sum, row) => {
+          const root = asRecord(row);
+          const taskRoot = asRecord(root?.task) ?? root;
+          const task = unwrapEntity(taskRoot);
+
+          const value =
+            toNonNegativeInt(
+              pickFromSources(task, taskRoot, [
+                "not_started_assignments",
+                "notStartedAssignments",
+                "not_started_count",
+                "notStartedCount",
+                "未着手_assignments",
+                "着手前_assignments",
+                "未着手_count",
+                "着手前_count",
+              ]),
+            ) ??
+            toNonNegativeInt(
+              pickFirstString(root, [
+                "not_started_assignments",
+                "notStartedAssignments",
+                "not_started_count",
+                "notStartedCount",
+                "未着手_assignments",
+                "着手前_assignments",
+                "未着手_count",
+                "着手前_count",
               ]),
             ) ??
             0;
@@ -1163,33 +1643,89 @@ export default async function Home() {
       const serializerStatusBase = extractTaskStatusCounts(tasksPayload);
       const serializerStatusCounts: TaskStatusCounts | null =
         serializerStatusBase
-        ? {
-            ...serializerStatusBase,
-            inProgress: Math.max(
-              serializerStatusBase.inProgress,
-              inProgressAssignmentsFromTaskRows,
-            ),
-            completed: Math.max(
-              serializerStatusBase.completed,
-              completedAssignmentsFromTaskRows,
-            ),
-          }
-        : completedAssignmentsFromTaskRows > 0 ||
-            inProgressAssignmentsFromTaskRows > 0
           ? {
-              notStarted: 0,
-              inProgress: inProgressAssignmentsFromTaskRows,
-              completed: completedAssignmentsFromTaskRows,
+              ...serializerStatusBase,
+              notStarted: Math.max(
+                serializerStatusBase.notStarted,
+                notStartedAssignmentsFromTaskRows,
+              ),
+              inProgress: Math.max(
+                serializerStatusBase.inProgress,
+                inProgressAssignmentsFromTaskRows,
+              ),
+              completed: Math.max(
+                serializerStatusBase.completed,
+                completedAssignmentsFromTaskRows,
+              ),
             }
-          : null;
+          : completedAssignmentsFromTaskRows > 0 ||
+              notStartedAssignmentsFromTaskRows > 0 ||
+              inProgressAssignmentsFromTaskRows > 0
+            ? {
+                notStarted: notStartedAssignmentsFromTaskRows,
+                inProgress: inProgressAssignmentsFromTaskRows,
+                completed: completedAssignmentsFromTaskRows,
+              }
+            : null;
+
+      const assignmentsFromTaskEndpoints = taskAssignmentsPayloads.flatMap(
+        (payload, index) => {
+          const taskId = taskIdList[index];
+          const task = tasks.find(
+            (taskItem) => normalizeText(taskItem.id) === normalizeText(taskId),
+          );
+
+          return extractAssignmentsArray(payload)
+            .map(normalizeAssignment)
+            .map((assignment) => ({
+              ...assignment,
+              groupId: assignment.groupId ?? group.id,
+              taskId: assignment.taskId ?? taskId,
+              taskName: assignment.taskName ?? task?.name,
+            }));
+        },
+      );
+
       const tasksForAssignBase = sortTasksForAssignment(tasks);
-      const assignments =
-        extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment);
+      const assignments = uniqueAssignmentsByKey([
+        ...extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment),
+        ...assignmentsFromTaskEndpoints,
+        ...extractAssignmentsFromTaskRows(taskRows, group.id),
+      ]);
+      console.log("[dashboard] group assignment extracted", {
+        groupId: group.id,
+        tasks: tasks.length,
+        fromGroupAssignmentsEndpoint:
+          extractAssignmentsArray(assignmentsPayload).length,
+        fromTaskAssignmentsEndpoints: assignmentsFromTaskEndpoints.length,
+        fromTaskRowsEmbedded: extractAssignmentsFromTaskRows(taskRows, group.id)
+          .length,
+        mergedUnique: assignments.length,
+      });
       const taskById = new Map(
         tasks
           .filter((task) => task.id)
           .map((task) => [normalizeText(task.id), task]),
       );
+
+      const assignmentsByTaskId = assignments.reduce((map, assignment) => {
+        const idKey = normalizeText(assignment.taskId);
+        const nameKey = normalizeText(assignment.taskName);
+        if (!idKey && !nameKey) {
+          return map;
+        }
+        if (idKey) {
+          const idBucket = map.get(`id:${idKey}`) ?? [];
+          idBucket.push(assignment);
+          map.set(`id:${idKey}`, idBucket);
+        }
+        if (nameKey) {
+          const nameBucket = map.get(`name:${nameKey}`) ?? [];
+          nameBucket.push(assignment);
+          map.set(`name:${nameKey}`, nameBucket);
+        }
+        return map;
+      }, new Map<string, AssignmentItem[]>());
 
       const membersInGroup = uniqueMembers(
         memberships
@@ -1248,6 +1784,8 @@ export default async function Home() {
       const groupMemberships = memberships.filter((membership) =>
         membershipBelongsToGroup(membership, group),
       );
+      const groupLookupKey = toGroupKey(group.id, group.name);
+      const myMembershipIdInGroup = myMembershipIdByGroup.get(groupLookupKey);
       const memberByMembershipId = new Map(
         groupMemberships
           .filter((membership) => membership.id)
@@ -1308,18 +1846,128 @@ export default async function Home() {
         };
       });
 
+      const taskCandidates = [...tasks];
+      for (const row of rows) {
+        if (
+          !taskCandidates.some((candidate) => isSameTask(candidate, row.task))
+        ) {
+          taskCandidates.push(row.task);
+        }
+      }
+
+      const taskCards: TaskCardItem[] = taskCandidates.map((task) => {
+        const summaryFromNormalized = getTaskSummary(task, assignmentsByTaskId);
+        const rowsForTask = rows.filter((row) => isSameTask(row.task, task));
+        const summaryFromRows = rowsForTask.reduce(
+          (sum, row) => {
+            if (isCompletedAssignment(row.assignment)) {
+              return { ...sum, completed: sum.completed + 1 };
+            }
+            if (isInProgressStatus(row.assignment.status)) {
+              return { ...sum, inProgress: sum.inProgress + 1 };
+            }
+            return { ...sum, notStarted: sum.notStarted + 1 };
+          },
+          { notStarted: 0, inProgress: 0, completed: 0 },
+        );
+
+        const summaryHasValue =
+          summaryFromNormalized.notStarted > 0 ||
+          summaryFromNormalized.inProgress > 0 ||
+          summaryFromNormalized.completed > 0;
+
+        const rowsHasValue =
+          summaryFromRows.notStarted > 0 ||
+          summaryFromRows.inProgress > 0 ||
+          summaryFromRows.completed > 0;
+
+        const summary = summaryHasValue
+          ? summaryFromNormalized
+          : summaryFromRows;
+        const debugSummarySource: TaskCardItem["debugSummarySource"] =
+          summaryHasValue ? "serializer" : rowsHasValue ? "rows" : "empty";
+
+        const myAssignmentFromNormalized = getMyAssignment(
+          task,
+          myMembershipIdInGroup,
+          assignmentsByTaskId,
+        );
+        const myMembershipKey = normalizeText(myMembershipIdInGroup);
+        const myAssignmentFromRows = myMembershipKey
+          ? rowsForTask
+              .filter(
+                ({ assignment, assignee }) =>
+                  normalizeText(assignment.membershipId) === myMembershipKey ||
+                  (normalizeText(assignment.assigneeId ?? assignee.id) !== "" &&
+                    selfUserIds.has(
+                      normalizeText(assignment.assigneeId ?? assignee.id),
+                    )) ||
+                  (normalizeText(assignment.assigneeEmail ?? assignee.email) !==
+                    "" &&
+                    selfEmails.has(
+                      normalizeText(assignment.assigneeEmail ?? assignee.email),
+                    )) ||
+                  isSameMember(assignee, currentUser),
+              )
+              .map((row) => row.assignment)
+              .sort((a, b) => {
+                const bTime = Math.max(
+                  toTimestamp(b.updatedAt),
+                  toTimestamp(b.createdAt),
+                );
+                const aTime = Math.max(
+                  toTimestamp(a.updatedAt),
+                  toTimestamp(a.createdAt),
+                );
+                return bTime - aTime;
+              })[0]
+          : undefined;
+
+        const myAssignment = myAssignmentFromNormalized ?? myAssignmentFromRows;
+        const debugMySource: TaskCardItem["debugMySource"] =
+          myAssignmentFromNormalized
+            ? "membership"
+            : myAssignmentFromRows
+              ? "assignee"
+              : "none";
+
+        return {
+          group,
+          task,
+          summary,
+          myAssignment,
+          debugSummarySource,
+          debugMySource,
+          myStatus: myAssignment
+            ? isCompletedAssignment(myAssignment)
+              ? "完了"
+              : isInProgressStatus(myAssignment.status)
+                ? "進行中"
+                : "着手前"
+            : getMyTaskStatus(task, myMembershipIdInGroup, assignmentsByTaskId),
+        };
+      });
+
       return {
         rows,
         assignedToCurrentCount,
         serializerStatusCounts,
+        taskCards,
       };
     }),
   );
 
   const allRows = groupTaskRows.flatMap((group) => group.rows);
-  const totalAssigned = groupTaskRows.reduce(
-    (sum, group) => sum + group.assignedToCurrentCount,
-    0,
+
+  const taskCards = groupTaskRows
+    .flatMap((group) => group.taskCards)
+    .sort(
+      (a, b) => toTimestamp(b.task.createdAt) - toTimestamp(a.task.createdAt),
+    );
+
+  const myTaskCards = taskCards.filter(
+    ({ myStatus, myAssignment }) =>
+      myStatus !== "未アサイン" || Boolean(myAssignment),
   );
 
   const myRows = allRows.filter(({ assignment, assignee }) => {
@@ -1343,14 +1991,19 @@ export default async function Home() {
     return isSameMember(assignee, currentUser);
   });
 
-  const recentAssignedTasks = [...myRows]
+  const totalAssigned = groupTaskRows.reduce(
+    (sum, group) => sum + group.assignedToCurrentCount,
+    0,
+  );
+
+  const recentAssignedTasks = [...myTaskCards]
     .sort((a, b) => {
       const bTime = Math.max(
-        toTimestamp(b.assignment.createdAt),
+        toTimestamp(b.myAssignment?.createdAt),
         toTimestamp(b.task.createdAt),
       );
       const aTime = Math.max(
-        toTimestamp(a.assignment.createdAt),
+        toTimestamp(a.myAssignment?.createdAt),
         toTimestamp(a.task.createdAt),
       );
       return bTime - aTime;
@@ -1396,54 +2049,25 @@ export default async function Home() {
       ),
     }));
 
-  const serializerStatusTotals = groupTaskRows.reduce(
-    (sum, group) => {
-      if (!group.serializerStatusCounts) {
-        return sum;
-      }
-      return {
-        notStarted: sum.notStarted + group.serializerStatusCounts.notStarted,
-        inProgress: sum.inProgress + group.serializerStatusCounts.inProgress,
-        completed: sum.completed + group.serializerStatusCounts.completed,
-        available: true,
-      };
-    },
-    {
-      notStarted: 0,
-      inProgress: 0,
-      completed: 0,
-      available: false,
-    },
-  );
-
-  const completedFromMyRows = myRows.filter(({ assignment }) => {
-    const status = normalizeText(assignment.status);
-    return status === "completed";
-  }).length;
+  const completedFromMyRows = myRows.filter(({ assignment }) =>
+    isCompletedAssignment(assignment),
+  ).length;
   const fallbackInProgressMine = myRows.filter(({ assignment }) => {
-    const status = normalizeText(assignment.status);
     return (
       !isCompletedAssignment(assignment) &&
-      (status === "in_progress" ||
-        status === "in progress" ||
-        status === "doing" ||
-        status === "進行中")
+      isInProgressStatus(assignment.status)
     );
   }).length;
-  const fallbackTodoMine = Math.max(
-    0,
-    totalAssigned - completedFromMyRows - fallbackInProgressMine,
-  );
+  const fallbackTodoMine = myRows.filter(({ assignment }) => {
+    return (
+      !isCompletedAssignment(assignment) &&
+      isNotStartedStatus(assignment.status)
+    );
+  }).length;
 
-  const completedMine = serializerStatusTotals.available
-    ? serializerStatusTotals.completed
-    : completedFromMyRows;
-  const inProgressMine = serializerStatusTotals.available
-    ? serializerStatusTotals.inProgress
-    : fallbackInProgressMine;
-  const todoMine = serializerStatusTotals.available
-    ? serializerStatusTotals.notStarted
-    : fallbackTodoMine;
+  const completedMine = completedFromMyRows;
+  const inProgressMine = fallbackInProgressMine;
+  const todoMine = fallbackTodoMine;
   const totalMine = completedMine + inProgressMine + todoMine;
   const completionRate =
     totalMine > 0 ? Math.round((completedMine / totalMine) * 100) : 0;
@@ -1452,9 +2076,7 @@ export default async function Home() {
     <div className="space-y-8 p-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            KajiShare
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">KajiShare</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
             こんにちは、{currentUser.name ?? "メンバー"} さん
           </p>
@@ -1573,23 +2195,52 @@ export default async function Home() {
             <p className="text-sm text-slate-500">担当タスクはありません。</p>
           ) : (
             <div className="space-y-3">
-              {recentAssignedTasks.map(({ group, assignment, task }, index) => (
-                <div
-                  key={
-                    assignment.id ??
-                    `${group.id ?? group.name}-${task.id ?? index}`
-                  }
-                  className="rounded-lg border p-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium">{task.name}</p>
-                    <span className="text-xs text-slate-500">{group.name}</span>
+              {recentAssignedTasks.map(
+                (
+                  {
+                    group,
+                    task,
+                    summary,
+                    myStatus,
+                    myAssignment,
+                    debugSummarySource,
+                    debugMySource,
+                  },
+                  index,
+                ) => (
+                  <div
+                    key={
+                      myAssignment?.id ??
+                      `${group.id ?? group.name}-${task.id ?? index}`
+                    }
+                    className="rounded-lg border p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{task.name}</p>
+                      <span className="text-xs text-slate-500">
+                        {group.name}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
+                        未着手 {summary.notStarted}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
+                        進行中 {summary.inProgress}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
+                        完了 {summary.completed}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500">
+                      自分の進行: {myStatus}
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      debug: summary={debugSummarySource} / mine={debugMySource}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    status: {assignment.status ?? "未設定"}
-                  </p>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           )}
         </section>
