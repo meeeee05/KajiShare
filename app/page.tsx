@@ -2182,7 +2182,6 @@ export default async function Home() {
                   {
                     group,
                     task,
-                    summary,
                     myStatus,
                     myAssignment,
                     debugSummarySource,
@@ -2201,17 +2200,6 @@ export default async function Home() {
                       <p className="font-medium">{task.name}</p>
                       <span className="text-xs text-slate-500">
                         {group.name}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
-                        着手前 {summary.notStarted}
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
-                        進行中 {summary.inProgress}
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-800">
-                        完了 {summary.completed}
                       </span>
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
