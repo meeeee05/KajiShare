@@ -2217,7 +2217,7 @@ export default async function Home() {
 
         <section className="rounded-xl border bg-card p-5 lg:col-span-2">
           <h2 className="mb-4 text-lg font-bold">
-            評価された自分が実行したタスク
+            評価されたタスク
           </h2>
           {evaluatedMyExecutedTasks.length === 0 ? (
             <p className="text-sm text-slate-500">
