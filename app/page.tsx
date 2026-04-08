@@ -2049,11 +2049,7 @@ export default async function Home() {
   const inProgressMine = myTaskCards.filter(
     ({ myStatus }) => myStatus === "進行中",
   ).length;
-  const todoMine = myTaskCards.filter(
-    ({ myStatus, myAssignment }) =>
-      myStatus === "着手前" ||
-      normalizeText(myAssignment?.status) === "着手前",
-  ).length;
+  const todoMine = Math.max(totalAssigned - completedMine - inProgressMine, 0);
   const totalMine = completedMine + inProgressMine + todoMine;
   const completionRate =
     totalMine > 0 ? Math.round((completedMine / totalMine) * 100) : 0;
