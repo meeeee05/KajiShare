@@ -994,6 +994,56 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
   };
 };
 
+const extractEvaluationsArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const rootData = asRecord(root.data);
+  const rootDataData = asRecord(rootData?.data);
+
+  const directArray = firstArray(
+    root.evaluations,
+    root.items,
+    root.results,
+    root.data,
+    rootData?.evaluations,
+    rootData?.items,
+    rootData?.results,
+    rootData?.data,
+    rootDataData?.evaluations,
+    rootDataData?.items,
+    rootDataData?.results,
+  );
+
+  if (directArray.length > 0) {
+    return directArray;
+  }
+
+  const singleData =
+    asRecord(root.data) ??
+    asRecord(rootData?.data) ??
+    asRecord(rootDataData?.data);
+  if (singleData) {
+    return [singleData];
+  }
+
+  const singleEvaluation =
+    asRecord(root.evaluation) ??
+    asRecord(rootData?.evaluation) ??
+    asRecord(rootDataData?.evaluation);
+  if (singleEvaluation) {
+    return [singleEvaluation];
+  }
+
+  return [];
+};
+
 const extractAssignmentsFromTaskRows = (
   taskRows: unknown[],
   groupId?: string,
@@ -1398,6 +1448,7 @@ export default async function Home() {
     meV1,
     meLegacy,
     meById,
+    evaluationsV1,
   ] = await Promise.all([
     fetchOkJson(`${v1Base}/groups`),
     fetchOkJson(`${base}/groups`),
@@ -1408,6 +1459,7 @@ export default async function Home() {
     sessionUserId
       ? fetchOkJson(`${v1Base}/users/${encodeURIComponent(sessionUserId)}`)
       : Promise.resolve(null),
+    fetchOkJson(`${v1Base}/evaluations`),
   ]);
 
   const groups = normalizeGroups([
@@ -1964,27 +2016,6 @@ export default async function Home() {
       myStatus !== "未アサイン" || Boolean(myAssignment),
   );
 
-  const myRows = allRows.filter(({ assignment, assignee }) => {
-    const membershipId = normalizeText(assignment.membershipId);
-    if (membershipId && myMembershipIds.has(membershipId)) {
-      return true;
-    }
-
-    const assigneeId = normalizeText(assignment.assigneeId ?? assignee.id);
-    if (assigneeId && selfUserIds.has(assigneeId)) {
-      return true;
-    }
-
-    const assigneeEmail = normalizeText(
-      assignment.assigneeEmail ?? assignee.email,
-    );
-    if (assigneeEmail && selfEmails.has(assigneeEmail)) {
-      return true;
-    }
-
-    return isSameMember(assignee, currentUser);
-  });
-
   const totalAssigned = groupTaskRows.reduce(
     (sum, group) => sum + group.assignedToCurrentCount,
     0,
@@ -2004,30 +2035,151 @@ export default async function Home() {
     })
     .slice(0, 8);
 
-  const evaluatedMyExecutedTasks = [...myRows]
-    .filter(({ assignment }) => {
-      const completedBy = normalizeText(assignment.completedByUserId);
-      const executedByMe = completedBy
-        ? selfUserIds.has(completedBy)
-        : isCompletedAssignment(assignment);
-      const hasEvaluation = Boolean(
-        assignment.evaluationId ||
-        assignment.evaluationScore ||
-        assignment.evaluationComment ||
-        assignment.evaluatedAt,
+  const taskGroupByTaskId = new Map<string, { task: TaskItem; group: GroupItem }>();
+  for (const row of allRows) {
+    const taskIdKey = normalizeText(row.task.id);
+    if (!taskIdKey || taskGroupByTaskId.has(taskIdKey)) {
+      continue;
+    }
+    taskGroupByTaskId.set(taskIdKey, { task: row.task, group: row.group });
+  }
+
+  const currentUserIdKey = normalizeText(currentUser.id ?? sessionUserId);
+  const evaluations = extractEvaluationsArray(evaluationsV1)
+    .map((row) => {
+      const evaluationRoot = asRecord(row);
+      const evaluation = unwrapEntity(evaluationRoot);
+
+      const assignmentRoot =
+        asRecord(evaluationRoot?.assignment) ??
+        asRecord(evaluation?.assignment) ??
+        asRecord(asRecord(evaluationRoot?.data)?.assignment) ??
+        asRecord(asRecord(evaluation?.data)?.assignment);
+      const assignment = normalizeAssignment(assignmentRoot ?? row);
+
+      const taskId =
+        pickFromSources(evaluation, evaluationRoot, ["task_id", "taskId"]) ??
+        pickFromSources(unwrapEntity(assignmentRoot), assignmentRoot, [
+          "task_id",
+          "taskId",
+        ]) ??
+        assignment.taskId;
+
+      const assignmentStatus =
+        pickFromSources(evaluation, evaluationRoot, [
+          "assignment_status",
+          "assignmentStatus",
+        ]) ??
+        pickFromSources(unwrapEntity(assignmentRoot), assignmentRoot, [
+          "status",
+          "state",
+        ]) ??
+        assignment.status;
+
+      const evaluatedUserId = pickFromSources(evaluation, evaluationRoot, [
+        "evaluated_user_id",
+        "evaluatedUserId",
+      ]);
+
+      const assignmentEntity = unwrapEntity(assignmentRoot);
+      const membershipRoot =
+        asRecord(assignmentRoot?.membership) ??
+        asRecord(assignmentEntity?.membership);
+      const membership = unwrapEntity(membershipRoot);
+      const membershipUserRoot =
+        asRecord(membershipRoot?.user) ??
+        asRecord(membership?.user) ??
+        asRecord(membershipRoot?.member) ??
+        asRecord(membership?.member);
+      const membershipUser = unwrapEntity(membershipUserRoot);
+
+      const assignmentUserId =
+        pickFromSources(membershipUser, membership, [
+          "user_id",
+          "userId",
+          "id",
+        ]) ?? pickFirstString(evaluationRoot, ["user_id", "userId"]);
+
+      const evaluatorId =
+        pickFromSources(evaluation, evaluationRoot, [
+          "evaluator_id",
+          "evaluatorId",
+        ]) ??
+        pickRelationshipId(evaluationRoot, ["evaluator", "user", "member"]);
+
+      return {
+        assignment: {
+          ...assignment,
+          taskId,
+          status: assignmentStatus,
+        },
+        assignmentUserId: evaluatedUserId ?? assignmentUserId,
+        evaluatorId,
+      };
+    })
+    .filter(({ assignment, assignmentUserId, evaluatorId }) => {
+      const assignmentUserKey = normalizeText(assignmentUserId);
+      const evaluatorKey = normalizeText(evaluatorId);
+      const statusKey = normalizeText(assignment.status);
+
+      if (!assignment.taskId) {
+        return false;
+      }
+
+      return (
+        assignmentUserKey.length > 0 &&
+        currentUserIdKey.length > 0 &&
+        assignmentUserKey === currentUserIdKey &&
+        statusKey === "completed" &&
+        evaluatorKey.length > 0 &&
+        evaluatorKey !== currentUserIdKey
       );
-      return executedByMe && hasEvaluation;
     })
     .sort((a, b) => {
       const bTime = Math.max(
         toTimestamp(b.assignment.evaluatedAt),
-        toTimestamp(b.assignment.completedDate),
+        toTimestamp(b.assignment.updatedAt),
       );
       const aTime = Math.max(
         toTimestamp(a.assignment.evaluatedAt),
-        toTimestamp(a.assignment.completedDate),
+        toTimestamp(a.assignment.updatedAt),
       );
       return bTime - aTime;
+    });
+
+  const uniqueEvaluationsByTaskId = new Map<string, AssignmentItem>();
+  for (const row of evaluations) {
+    const taskIdKey = normalizeText(row.assignment.taskId);
+    if (!taskIdKey || uniqueEvaluationsByTaskId.has(taskIdKey)) {
+      continue;
+    }
+    uniqueEvaluationsByTaskId.set(taskIdKey, row.assignment);
+  }
+
+  const evaluatedMyExecutedTasks = Array.from(uniqueEvaluationsByTaskId.values())
+    .map((assignment) => {
+      const taskIdKey = normalizeText(assignment.taskId);
+      const matched = taskGroupByTaskId.get(taskIdKey);
+
+      const task: TaskItem = matched?.task ?? {
+        id: assignment.taskId,
+        name: assignment.taskName ?? "タスク",
+        point: assignment.taskPoint,
+        description: assignment.taskDescription,
+        sourceIndex: -1,
+      };
+
+      const group: GroupItem = matched?.group ?? {
+        id: assignment.groupId,
+        name: "グループ",
+        assignMode: "",
+      };
+
+      return {
+        group,
+        assignment,
+        task,
+      };
     })
     .slice(0, 8);
 
@@ -2221,7 +2373,7 @@ export default async function Home() {
           </h2>
           {evaluatedMyExecutedTasks.length === 0 ? (
             <p className="text-sm text-slate-500">
-              まだ評価済みタスクはありません。
+              他メンバーからの評価はまだありません
             </p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
