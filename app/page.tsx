@@ -80,8 +80,6 @@ type TaskCardItem = {
   summary: TaskStatusCounts;
   myStatus: MyTaskStatus;
   myAssignment?: AssignmentItem;
-  debugSummarySource: "serializer" | "rows" | "empty";
-  debugMySource: "membership" | "assignee" | "none";
 };
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
@@ -1930,8 +1928,6 @@ export default async function Home() {
         const summary = summaryHasValue
           ? summaryFromNormalized
           : summaryFromRows;
-        const debugSummarySource: TaskCardItem["debugSummarySource"] =
-          summaryHasValue ? "serializer" : rowsHasValue ? "rows" : "empty";
 
         const myAssignmentFromNormalized = getMyAssignment(
           task,
@@ -1970,20 +1966,12 @@ export default async function Home() {
           : undefined;
 
         const myAssignment = myAssignmentFromNormalized ?? myAssignmentFromRows;
-        const debugMySource: TaskCardItem["debugMySource"] =
-          myAssignmentFromNormalized
-            ? "membership"
-            : myAssignmentFromRows
-              ? "assignee"
-              : "none";
 
         return {
           group,
           task,
           summary,
           myAssignment,
-          debugSummarySource,
-          debugMySource,
           myStatus: myAssignment
             ? isCompletedAssignment(myAssignment)
               ? "完了"
@@ -2035,7 +2023,10 @@ export default async function Home() {
     })
     .slice(0, 8);
 
-  const taskGroupByTaskId = new Map<string, { task: TaskItem; group: GroupItem }>();
+  const taskGroupByTaskId = new Map<
+    string,
+    { task: TaskItem; group: GroupItem }
+  >();
   for (const row of allRows) {
     const taskIdKey = normalizeText(row.task.id);
     if (!taskIdKey || taskGroupByTaskId.has(taskIdKey)) {
@@ -2156,7 +2147,9 @@ export default async function Home() {
     uniqueEvaluationsByTaskId.set(taskIdKey, row.assignment);
   }
 
-  const evaluatedMyExecutedTasks = Array.from(uniqueEvaluationsByTaskId.values())
+  const evaluatedMyExecutedTasks = Array.from(
+    uniqueEvaluationsByTaskId.values(),
+  )
     .map((assignment) => {
       const taskIdKey = normalizeText(assignment.taskId);
       const matched = taskGroupByTaskId.get(taskIdKey);
@@ -2336,8 +2329,6 @@ export default async function Home() {
                     task,
                     myStatus,
                     myAssignment,
-                    debugSummarySource,
-                    debugMySource,
                   },
                   index,
                 ) => (
@@ -2357,9 +2348,6 @@ export default async function Home() {
                     <p className="mt-2 text-xs text-slate-500">
                       自分の進行: {myStatus}
                     </p>
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      debug: summary={debugSummarySource} / mine={debugMySource}
-                    </p>
                   </div>
                 ),
               )}
@@ -2368,9 +2356,7 @@ export default async function Home() {
         </section>
 
         <section className="rounded-xl border bg-card p-5 lg:col-span-2">
-          <h2 className="mb-4 text-lg font-bold">
-            評価されたタスク
-          </h2>
+          <h2 className="mb-4 text-lg font-bold">評価されたタスク</h2>
           {evaluatedMyExecutedTasks.length === 0 ? (
             <p className="text-sm text-slate-500">
               他メンバーからの評価はまだありません
