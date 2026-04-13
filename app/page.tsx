@@ -2103,6 +2103,41 @@ export default async function Home() {
           ...assignment,
           taskId,
           status: assignmentStatus,
+          evaluationId:
+            assignment.evaluationId ??
+            pickFromSources(evaluation, evaluationRoot, [
+              "id",
+              "evaluation_id",
+              "evaluationId",
+            ]),
+          evaluationScore:
+            assignment.evaluationScore ??
+            pickFromSources(evaluation, evaluationRoot, [
+              "score",
+              "evaluation_score",
+              "evaluationScore",
+              "point",
+              "rating",
+            ]),
+          evaluationComment:
+            assignment.evaluationComment ??
+            pickFromSources(evaluation, evaluationRoot, [
+              "comment",
+              "evaluation_comment",
+              "evaluationComment",
+              "body",
+              "memo",
+            ]),
+          evaluatedAt:
+            assignment.evaluatedAt ??
+            pickFromSources(evaluation, evaluationRoot, [
+              "evaluated_at",
+              "evaluatedAt",
+              "created_at",
+              "createdAt",
+              "updated_at",
+              "updatedAt",
+            ]),
         },
         assignmentUserId: evaluatedUserId ?? assignmentUserId,
         evaluatorId,
@@ -2323,15 +2358,7 @@ export default async function Home() {
           ) : (
             <div className="space-y-3">
               {recentAssignedTasks.map(
-                (
-                  {
-                    group,
-                    task,
-                    myStatus,
-                    myAssignment,
-                  },
-                  index,
-                ) => (
+                ({ group, task, myStatus, myAssignment }, index) => (
                   <div
                     key={
                       myAssignment?.id ??
