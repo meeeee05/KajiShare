@@ -31,13 +31,13 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
     const trimmedDescription = description.trim();
 
     if (!trimmedName || !trimmedPoint || !trimmedDescription) {
-      setError("name / point / description は必須です。");
+      setError("名前 / 負担ポイント / 備考 は必須です。");
       return;
     }
 
     const parsedPoint = Number(trimmedPoint);
     if (!Number.isFinite(parsedPoint)) {
-      setError("point は数値で入力してください。");
+      setError("負担ポイント は数値で入力してください。");
       return;
     }
 
@@ -102,7 +102,7 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="name"
+          placeholder="名前"
           required
           disabled={isPending || !groupId}
           className="rounded-md border bg-background px-2 py-1 text-sm"
@@ -111,7 +111,7 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
           type="number"
           value={point}
           onChange={(e) => setPoint(e.target.value)}
-          placeholder="point"
+          placeholder="負担ポイント"
           required
           disabled={isPending || !groupId}
           className="rounded-md border bg-background px-2 py-1 text-sm"
@@ -119,7 +119,7 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
         <input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="description"
+          placeholder="備考"
           required
           disabled={isPending || !groupId}
           className="rounded-md border bg-background px-2 py-1 text-sm"
