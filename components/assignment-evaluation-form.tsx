@@ -5,11 +5,13 @@ import { useSession } from "next-auth/react";
 
 type Props = {
   assignmentId?: string;
+  taskId?: string;
   apiUrl?: string;
 };
 
 export default function AssignmentEvaluationForm({
   assignmentId,
+  taskId,
   apiUrl,
 }: Props) {
   const { data: session } = useSession();
@@ -78,16 +80,33 @@ export default function AssignmentEvaluationForm({
       if (res.ok) {
         setComment("");
         setScore("3");
-        const row = formElement.closest("tr");
-        if (row) {
-          row.remove();
+        const normalizedTaskId = (taskId ?? "").trim();
+        if (normalizedTaskId) {
+          const rows = document.querySelectorAll(
+            `tr[data-task-id="${CSS.escape(normalizedTaskId)}"]`,
+          );
+          rows.forEach((row) => row.remove());
+        } else {
+          const row = formElement.closest("tr");
+          if (row) {
+            row.remove();
+          }
         }
         return;
       }
 
       if (res.status === 422) {
         setInfo("評価済み");
+        const normalizedTaskId = (taskId ?? "").trim();
         setTimeout(() => {
+          if (normalizedTaskId) {
+            const rows = document.querySelectorAll(
+              `tr[data-task-id="${CSS.escape(normalizedTaskId)}"]`,
+            );
+            rows.forEach((row) => row.remove());
+            return;
+          }
+
           const row = formElement.closest("tr");
           if (row) {
             row.remove();

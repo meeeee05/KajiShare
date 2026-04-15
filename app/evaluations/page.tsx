@@ -45,6 +45,14 @@ type AssignmentItem = {
   assigneeEmail?: string;
 };
 
+type EvaluationItem = {
+  assignmentId?: string;
+  taskId?: string;
+  evaluatorId?: string;
+  evaluatorEmail?: string;
+  evaluatorName?: string;
+};
+
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
 const asRecord = (value: unknown): AnyRecord | null => {
@@ -91,6 +99,100 @@ const firstArray = (...values: unknown[]): unknown[] => {
     }
   }
   return [];
+};
+
+const pickRelationshipId = (
+  obj: AnyRecord | null,
+  relationshipKeys: string[],
+): string | undefined => {
+  if (!obj) {
+    return undefined;
+  }
+
+  for (const key of relationshipKeys) {
+    const rel = asRecord(obj[key]);
+    const relData = asRecord(rel?.data);
+    const direct = pickFirstString(relData, ["id"]);
+    if (direct) {
+      return direct;
+    }
+
+    const nested = asRecord(relData?.attributes) ?? asRecord(relData?.data);
+    const nestedId = pickFirstString(nested, ["id"]);
+    if (nestedId) {
+      return nestedId;
+    }
+  }
+
+  return undefined;
+};
+
+const extractEvaluationsArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const rootData = asRecord(root.data);
+  const rootDataData = asRecord(rootData?.data);
+
+  return firstArray(
+    root.evaluations,
+    root.items,
+    root.results,
+    root.data,
+    rootData?.evaluations,
+    rootData?.items,
+    rootData?.results,
+    rootData?.data,
+    rootDataData?.evaluations,
+    rootDataData?.items,
+    rootDataData?.results,
+  );
+};
+
+const normalizeEvaluation = (row: unknown): EvaluationItem => {
+  const root = asRecord(row);
+  const evaluationRoot = asRecord(root?.evaluation) ?? root;
+  const evaluation = unwrapEntity(evaluationRoot);
+
+  const evaluatorRoot =
+    asRecord(evaluationRoot?.evaluator) ??
+    asRecord(evaluationRoot?.user) ??
+    asRecord(evaluation?.evaluator) ??
+    asRecord(evaluation?.user);
+  const evaluator = unwrapEntity(evaluatorRoot);
+
+  return {
+    assignmentId:
+      pickFromSources(evaluation, evaluationRoot, [
+        "assignment_id",
+        "assignmentId",
+      ]) ??
+      pickRelationshipId(evaluationRoot, ["assignment", "task_assignment"]),
+    taskId:
+      pickFromSources(evaluation, evaluationRoot, ["task_id", "taskId"]) ??
+      pickRelationshipId(evaluationRoot, ["task"]),
+    evaluatorId:
+      pickFromSources(evaluator, evaluation, ["id", "user_id", "userId"]) ??
+      pickFromSources(evaluation, evaluationRoot, [
+        "evaluator_id",
+        "evaluatorId",
+        "user_id",
+        "userId",
+      ]) ??
+      pickRelationshipId(evaluationRoot, ["evaluator", "user", "member"]),
+    evaluatorEmail:
+      pickFromSources(evaluator, evaluation, ["email", "mail"]) ??
+      pickFromSources(evaluation, evaluationRoot, ["evaluator_email", "email"]),
+    evaluatorName:
+      pickFromSources(evaluator, evaluation, ["name", "user_name"]) ??
+      pickFromSources(evaluation, evaluationRoot, ["evaluator_name", "name"]),
+  };
 };
 
 const extractGroupsArray = (payload: unknown): unknown[] => {
@@ -625,6 +727,8 @@ export default async function EvaluationsPage() {
     groupsLegacy,
     membershipsV1,
     membershipsLegacy,
+    evaluationsV1,
+    evaluationsLegacy,
     meV1,
     meLegacy,
     meById,
@@ -633,6 +737,8 @@ export default async function EvaluationsPage() {
     fetchOkJson(`${base}/groups`),
     fetchOkJson(`${v1Base}/memberships`),
     fetchOkJson(`${base}/memberships`),
+    fetchOkJson(`${v1Base}/evaluations`),
+    fetchOkJson(`${base}/evaluations`),
     fetchOkJson(`${v1Base}/users/me`),
     fetchOkJson(`${base}/users/me`),
     sessionUserId
@@ -698,6 +804,31 @@ export default async function EvaluationsPage() {
     [currentUser.email, session.user?.email]
       .map((value) => (typeof value === "string" ? normalizeText(value) : ""))
       .filter((value) => value.length > 0),
+  );
+
+  const isEvaluationByMe = (evaluation: EvaluationItem) => {
+    const evaluatorId = normalizeText(evaluation.evaluatorId);
+    if (evaluatorId && selfUserIds.has(evaluatorId)) {
+      return true;
+    }
+
+    const evaluatorEmail = normalizeText(evaluation.evaluatorEmail);
+    if (evaluatorEmail && selfEmails.has(evaluatorEmail)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const evaluatedAssignmentIdsByMe = new Set(
+    [
+      ...extractEvaluationsArray(evaluationsV1),
+      ...extractEvaluationsArray(evaluationsLegacy),
+    ]
+      .map((row) => normalizeEvaluation(row))
+      .filter((evaluation) => isEvaluationByMe(evaluation))
+      .map((evaluation) => normalizeText(evaluation.assignmentId))
+      .filter((assignmentId) => assignmentId.length > 0),
   );
 
   const globalMemberByMembershipId = new Map(
@@ -831,6 +962,18 @@ export default async function EvaluationsPage() {
         isCompletedAssignment(assignment),
       );
 
+      const evaluatedTaskIdsByMeFromAssignments = new Set(
+        completedAssignments
+          .filter((assignment) => {
+            const assignmentId = normalizeText(assignment.id);
+            return Boolean(
+              assignmentId && evaluatedAssignmentIdsByMe.has(assignmentId),
+            );
+          })
+          .map((assignment) => normalizeText(assignment.taskId))
+          .filter((taskId) => taskId.length > 0),
+      );
+
       const missingTaskIds = Array.from(
         new Set(
           completedAssignments
@@ -915,6 +1058,22 @@ export default async function EvaluationsPage() {
 
       const rows = completedAssignments
         .map((assignment) => {
+          const normalizedAssignmentId = normalizeText(assignment.id);
+          if (
+            normalizedAssignmentId &&
+            evaluatedAssignmentIdsByMe.has(normalizedAssignmentId)
+          ) {
+            return null;
+          }
+
+          const normalizedTaskId = normalizeText(assignment.taskId);
+          if (
+            normalizedTaskId &&
+            evaluatedTaskIdsByMeFromAssignments.has(normalizedTaskId)
+          ) {
+            return null;
+          }
+
           const completedByUserId = normalizeText(assignment.completedByUserId);
           if (completedByUserId && selfUserIds.has(completedByUserId)) {
             return null;
@@ -1075,6 +1234,7 @@ export default async function EvaluationsPage() {
                         key={
                           assignment.id ?? `${group.id ?? group.name}-${index}`
                         }
+                        data-task-id={task.id ?? assignment.taskId ?? ""}
                         className="border-t align-top"
                       >
                         <td className="px-3 py-2 font-medium">{task.name}</td>
@@ -1093,6 +1253,7 @@ export default async function EvaluationsPage() {
                         <td className="px-3 py-2">
                           <AssignmentEvaluationForm
                             assignmentId={assignment.id}
+                            taskId={task.id ?? assignment.taskId}
                             apiUrl={apiUrl}
                           />
                         </td>

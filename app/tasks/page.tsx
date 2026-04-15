@@ -331,12 +331,9 @@ export default async function TasksPage() {
                 <table className="min-w-full border-collapse text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">name</th>
-                      <th className="px-3 py-2 font-semibold">point</th>
-                      <th className="px-3 py-2 font-semibold">description</th>
-                      <th className="px-3 py-2 text-right font-semibold">
-                        操作
-                      </th>
+                      <th className="px-3 py-2 font-semibold">名前</th>
+                      <th className="px-3 py-2 font-semibold">負担ポイント</th>
+                      <th className="px-3 py-2 font-semibold">備考</th>
                     </tr>
                   </thead>
                   <tbody>
