@@ -2209,7 +2209,7 @@ export default async function Home() {
         task,
       };
     })
-    .slice(0, 8);
+    .slice(0, 6);
 
   const recentGroups = [...groups]
     .sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt))
