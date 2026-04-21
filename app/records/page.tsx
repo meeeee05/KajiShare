@@ -1022,6 +1022,19 @@ const balanceTypeLabel = (value: GroupItem["balanceType"]) => {
   return "未設定";
 };
 
+const isCompletedStatus = (value?: string) => {
+  const normalized = normalizeText(value);
+  return (
+    normalized === "completed" ||
+    normalized === "complete" ||
+    normalized === "完了済み" ||
+    normalized === "済" ||
+    normalized === "done" ||
+    normalized === "finished" ||
+    normalized === "完了"
+  );
+};
+
 const recordsDebugEnabled = process.env.RECORDS_DEBUG === "1";
 
 const recordsDebugLog = (label: string, payload: unknown) => {
@@ -1339,7 +1352,11 @@ export default async function RecordsPage() {
   );
 
   const totalAssigned = groupsWithAssignments.reduce(
-    (sum, row) => sum + row.assignedTasks.length,
+    (sum, row) =>
+      sum +
+      row.assignedTasks.filter(
+        (task) => !isCompletedStatus(task.assignmentStatus),
+      ).length,
     0,
   );
 

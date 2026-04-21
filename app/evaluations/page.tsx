@@ -172,11 +172,18 @@ const normalizeEvaluation = (row: unknown): EvaluationItem => {
       pickFromSources(evaluation, evaluationRoot, [
         "assignment_id",
         "assignmentId",
+        "assignment",
       ]) ??
-      pickRelationshipId(evaluationRoot, ["assignment", "task_assignment"]),
+      pickRelationshipId(evaluationRoot, ["assignment", "task_assignment"]) ??
+      pickRelationshipId(evaluation, ["assignment", "task_assignment"]),
     taskId:
-      pickFromSources(evaluation, evaluationRoot, ["task_id", "taskId"]) ??
-      pickRelationshipId(evaluationRoot, ["task"]),
+      pickFromSources(evaluation, evaluationRoot, [
+        "task_id",
+        "taskId",
+        "task",
+      ]) ??
+      pickRelationshipId(evaluationRoot, ["task"]) ??
+      pickRelationshipId(evaluation, ["task"]),
     evaluatorId:
       pickFromSources(evaluator, evaluation, ["id", "user_id", "userId"]) ??
       pickFromSources(evaluation, evaluationRoot, [
@@ -820,15 +827,28 @@ export default async function EvaluationsPage() {
     return false;
   };
 
+  const normalizedEvaluations = [
+    ...extractEvaluationsArray(evaluationsV1),
+    ...extractEvaluationsArray(evaluationsLegacy),
+  ].map((row) => normalizeEvaluation(row));
+
   const evaluatedAssignmentIdsByMe = new Set(
-    [
-      ...extractEvaluationsArray(evaluationsV1),
-      ...extractEvaluationsArray(evaluationsLegacy),
-    ]
-      .map((row) => normalizeEvaluation(row))
+    normalizedEvaluations
       .filter((evaluation) => isEvaluationByMe(evaluation))
       .map((evaluation) => normalizeText(evaluation.assignmentId))
       .filter((assignmentId) => assignmentId.length > 0),
+  );
+
+  const evaluatedAssignmentIds = new Set(
+    normalizedEvaluations
+      .map((evaluation) => normalizeText(evaluation.assignmentId))
+      .filter((assignmentId) => assignmentId.length > 0),
+  );
+
+  const evaluatedTaskIds = new Set(
+    normalizedEvaluations
+      .map((evaluation) => normalizeText(evaluation.taskId))
+      .filter((taskId) => taskId.length > 0),
   );
 
   const globalMemberByMembershipId = new Map(
@@ -962,18 +982,6 @@ export default async function EvaluationsPage() {
         isCompletedAssignment(assignment),
       );
 
-      const evaluatedTaskIdsByMeFromAssignments = new Set(
-        completedAssignments
-          .filter((assignment) => {
-            const assignmentId = normalizeText(assignment.id);
-            return Boolean(
-              assignmentId && evaluatedAssignmentIdsByMe.has(assignmentId),
-            );
-          })
-          .map((assignment) => normalizeText(assignment.taskId))
-          .filter((taskId) => taskId.length > 0),
-      );
-
       const missingTaskIds = Array.from(
         new Set(
           completedAssignments
@@ -1059,17 +1067,22 @@ export default async function EvaluationsPage() {
       const rows = completedAssignments
         .map((assignment) => {
           const normalizedAssignmentId = normalizeText(assignment.id);
+          const normalizedTaskId = normalizeText(assignment.taskId);
+
+          if (normalizedTaskId && evaluatedTaskIds.has(normalizedTaskId)) {
+            return null;
+          }
+
           if (
             normalizedAssignmentId &&
-            evaluatedAssignmentIdsByMe.has(normalizedAssignmentId)
+            evaluatedAssignmentIds.has(normalizedAssignmentId)
           ) {
             return null;
           }
 
-          const normalizedTaskId = normalizeText(assignment.taskId);
           if (
-            normalizedTaskId &&
-            evaluatedTaskIdsByMeFromAssignments.has(normalizedTaskId)
+            normalizedAssignmentId &&
+            evaluatedAssignmentIdsByMe.has(normalizedAssignmentId)
           ) {
             return null;
           }
