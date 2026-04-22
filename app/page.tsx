@@ -971,11 +971,12 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       "id",
       "evaluation_id",
     ]),
-    evaluationScore: pickFromSources(evaluation, evaluationRoot, [
-      "score",
-      "point",
-      "rating",
-    ]) ??
+    evaluationScore:
+      pickFromSources(evaluation, evaluationRoot, [
+        "score",
+        "point",
+        "rating",
+      ]) ??
       pickFromSources(assignment, assignmentRoot, [
         "evaluation_score",
         "evaluationScore",
@@ -983,12 +984,13 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
         "point",
         "rating",
       ]),
-    evaluationComment: pickFromSources(evaluation, evaluationRoot, [
-      "feedback",
-      "comment",
-      "body",
-      "memo",
-    ]) ??
+    evaluationComment:
+      pickFromSources(evaluation, evaluationRoot, [
+        "feedback",
+        "comment",
+        "body",
+        "memo",
+      ]) ??
       pickFromSources(assignment, assignmentRoot, [
         "feedback",
         "evaluation_comment",
@@ -997,14 +999,15 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
         "body",
         "memo",
       ]),
-    evaluatedAt: pickFromSources(evaluation, evaluationRoot, [
-      "created_at",
-      "createdAt",
-      "evaluated_at",
-      "evaluatedAt",
-      "updated_at",
-      "updatedAt",
-    ]) ??
+    evaluatedAt:
+      pickFromSources(evaluation, evaluationRoot, [
+        "created_at",
+        "createdAt",
+        "evaluated_at",
+        "evaluatedAt",
+        "updated_at",
+        "updatedAt",
+      ]) ??
       pickFromSources(assignment, assignmentRoot, [
         "evaluated_at",
         "evaluatedAt",

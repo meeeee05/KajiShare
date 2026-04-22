@@ -331,8 +331,8 @@ export default async function TasksPage() {
                 <table className="min-w-full border-collapse text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">名前</th>
-                      <th className="px-3 py-2 font-semibold">負担ポイント</th>
+                      <th className="px-3 py-2 font-semibold">家事の名前</th>
+                      <th className="px-3 py-2 font-semibold">負担ポイント（1〜5）</th>
                       <th className="px-3 py-2 font-semibold">備考</th>
                     </tr>
                   </thead>
