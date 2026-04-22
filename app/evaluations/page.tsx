@@ -1233,11 +1233,11 @@ export default async function EvaluationsPage() {
                 <table className="min-w-full border-collapse text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">name</th>
-                      <th className="px-3 py-2 font-semibold">point</th>
-                      <th className="px-3 py-2 font-semibold">description</th>
+                      <th className="px-3 py-2 font-semibold">家事</th>
+                      <th className="px-3 py-2 font-semibold">負担ポイント</th>
+                      <th className="px-3 py-2 font-semibold">備考</th>
                       <th className="px-3 py-2 font-semibold">実施者</th>
-                      <th className="px-3 py-2 font-semibold">status</th>
+                      <th className="px-3 py-2 font-semibold">進捗状況</th>
                       <th className="px-3 py-2 font-semibold">評価</th>
                     </tr>
                   </thead>

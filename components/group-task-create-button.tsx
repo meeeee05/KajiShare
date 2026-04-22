@@ -96,9 +96,9 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
   return (
     <form
       onSubmit={onCreate}
-      className="w-full space-y-2 rounded-md border p-3"
+      className="w-full rounded-md border p-3"
     >
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_minmax(0,2.2fr)_auto] sm:items-center">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -124,14 +124,14 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
           disabled={isPending || !groupId}
           className="rounded-md border bg-background px-2 py-1 text-sm"
         />
+        <button
+          type="submit"
+          disabled={isPending || !groupId}
+          className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 sm:whitespace-nowrap"
+        >
+          タスクを登録
+        </button>
       </div>
-      <button
-        type="submit"
-        disabled={isPending || !groupId}
-        className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        タスクを登録
-      </button>
       {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </form>
   );

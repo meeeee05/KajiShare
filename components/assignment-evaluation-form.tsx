@@ -142,7 +142,7 @@ export default function AssignmentEvaluationForm({
       <input
         value={comment}
         onChange={(e) => setComment(e.target.value)}
-        placeholder="コメント"
+        placeholder="フィードバックコメント"
         disabled={isPending || !assignmentId}
         className="w-40 rounded-md border bg-background px-2 py-1 text-xs"
       />

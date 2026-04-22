@@ -1106,7 +1106,7 @@ export default async function RecordsPage() {
     return (
       <div className="prose max-w-none p-6">
         <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
-          <h1 className="text-2xl font-extrabold">担当のタスク</h1>
+          <h1 className="text-2xl font-extrabold">担当の家事</h1>
         </div>
         <div className="not-prose mt-8 space-y-4">
           <p className="text-slate-600 dark:text-slate-300">
@@ -1363,7 +1363,7 @@ export default async function RecordsPage() {
   return (
     <div className="prose max-w-none p-6">
       <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
-        <h1 className="text-2xl font-extrabold">担当のタスク</h1>
+        <h1 className="text-2xl font-extrabold">担当の家事</h1>
       </div>
 
       <p className="mt-6 text-sm text-slate-600 dark:text-slate-300">
@@ -1392,17 +1392,17 @@ export default async function RecordsPage() {
 
             {assignedTasks.length === 0 ? (
               <p className="text-sm text-slate-500">
-                本日の担当タスクはありません。
+                本日の担当家事はありません。
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
                 <table className="min-w-full border-collapse text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">name</th>
-                      <th className="px-3 py-2 font-semibold">point</th>
-                      <th className="px-3 py-2 font-semibold">description</th>
-                      <th className="px-3 py-2 font-semibold">status</th>
+                      <th className="px-3 py-2 font-semibold">家事の名前</th>
+                      <th className="px-3 py-2 font-semibold">負担ポイント</th>
+                      <th className="px-3 py-2 font-semibold">備考</th>
+                      <th className="px-3 py-2 font-semibold">進捗状況</th>
                     </tr>
                   </thead>
                   <tbody>
