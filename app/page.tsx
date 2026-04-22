@@ -975,12 +975,28 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       "score",
       "point",
       "rating",
-    ]),
+    ]) ??
+      pickFromSources(assignment, assignmentRoot, [
+        "evaluation_score",
+        "evaluationScore",
+        "score",
+        "point",
+        "rating",
+      ]),
     evaluationComment: pickFromSources(evaluation, evaluationRoot, [
+      "feedback",
       "comment",
       "body",
       "memo",
-    ]),
+    ]) ??
+      pickFromSources(assignment, assignmentRoot, [
+        "feedback",
+        "evaluation_comment",
+        "evaluationComment",
+        "comment",
+        "body",
+        "memo",
+      ]),
     evaluatedAt: pickFromSources(evaluation, evaluationRoot, [
       "created_at",
       "createdAt",
@@ -988,7 +1004,15 @@ const normalizeAssignment = (row: unknown): AssignmentItem => {
       "evaluatedAt",
       "updated_at",
       "updatedAt",
-    ]),
+    ]) ??
+      pickFromSources(assignment, assignmentRoot, [
+        "evaluated_at",
+        "evaluatedAt",
+        "evaluation_created_at",
+        "evaluationCreatedAt",
+        "evaluation_updated_at",
+        "evaluationUpdatedAt",
+      ]),
   };
 };
 
@@ -2118,13 +2142,29 @@ export default async function Home() {
               "evaluationScore",
               "point",
               "rating",
+            ]) ??
+            pickFromSources(assignmentEntity, assignmentRoot, [
+              "evaluation_score",
+              "evaluationScore",
+              "score",
+              "point",
+              "rating",
             ]),
           evaluationComment:
             assignment.evaluationComment ??
             pickFromSources(evaluation, evaluationRoot, [
+              "feedback",
               "comment",
               "evaluation_comment",
               "evaluationComment",
+              "body",
+              "memo",
+            ]) ??
+            pickFromSources(assignmentEntity, assignmentRoot, [
+              "feedback",
+              "evaluation_comment",
+              "evaluationComment",
+              "comment",
               "body",
               "memo",
             ]),
@@ -2137,6 +2177,14 @@ export default async function Home() {
               "createdAt",
               "updated_at",
               "updatedAt",
+            ]) ??
+            pickFromSources(assignmentEntity, assignmentRoot, [
+              "evaluated_at",
+              "evaluatedAt",
+              "evaluation_created_at",
+              "evaluationCreatedAt",
+              "evaluation_updated_at",
+              "evaluationUpdatedAt",
             ]),
         },
         assignmentUserId: evaluatedUserId ?? assignmentUserId,
