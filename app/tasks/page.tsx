@@ -238,7 +238,7 @@ export default async function TasksPage() {
 
   if (groups.length === 0) {
     return (
-      <div className="prose max-w-none p-6">
+      <div className="prose max-w-none p-4 sm:p-6">
         <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
           タスク一覧
         </h1>
@@ -300,7 +300,7 @@ export default async function TasksPage() {
   );
 
   return (
-    <div className="prose max-w-none p-6">
+    <div className="prose max-w-none p-4 sm:p-6">
       <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">
         タスク一覧
       </h1>
@@ -309,9 +309,9 @@ export default async function TasksPage() {
         {groupsWithTasks.map(({ group, tasks }) => (
           <section
             key={group.id ?? group.name}
-            className="rounded-xl border bg-white p-5 shadow-sm dark:bg-slate-950"
+            className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-950 sm:p-5"
           >
-            <div className="mb-4 flex items-center justify-between gap-3 border-b pb-3">
+            <div className="mb-4 flex flex-col items-start justify-between gap-3 border-b pb-3 sm:flex-row sm:items-center">
               <h2 className="text-lg font-bold tracking-tight">{group.name}</h2>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-200">
                 {tasks.length} 件
@@ -328,11 +328,13 @@ export default async function TasksPage() {
               </p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
-                <table className="min-w-full border-collapse text-sm">
+                <table className="min-w-[640px] w-full border-collapse text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
                     <tr>
                       <th className="px-3 py-2 font-semibold">家事の名前</th>
-                      <th className="px-3 py-2 font-semibold">負担ポイント（1〜5）</th>
+                      <th className="px-3 py-2 font-semibold">
+                        負担ポイント（1〜5）
+                      </th>
                       <th className="px-3 py-2 font-semibold">備考</th>
                     </tr>
                   </thead>

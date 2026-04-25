@@ -2286,7 +2286,7 @@ export default async function Home() {
     totalMine > 0 ? Math.round((completedMine / totalMine) * 100) : 0;
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-6 p-4 sm:space-y-8 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">KajiShare</h1>
@@ -2319,7 +2319,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="rounded-xl border bg-card p-5">
+      <section className="rounded-xl border bg-card p-4 sm:p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">自分に振られたタスク進捗</h2>
           <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -2358,8 +2358,8 @@ export default async function Home() {
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border bg-card p-5">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+        <section className="rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="mb-4 text-lg font-bold">
             最近登録したグループとメンバー
           </h2>
@@ -2400,7 +2400,7 @@ export default async function Home() {
           )}
         </section>
 
-        <section className="rounded-xl border bg-card p-5">
+        <section className="rounded-xl border bg-card p-4 sm:p-5">
           <h2 className="mb-4 text-lg font-bold">
             最近自分に割り当てられたタスク
           </h2>

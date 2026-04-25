@@ -20,6 +20,10 @@ export function MainNav({
   hideMenu?: boolean;
   disableLogoLink?: boolean;
 }) {
+  const brandClass = hideMenu
+    ? "text-3xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl"
+    : "text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl";
+
   const logoContent = (
     <>
       <span className="text-slate-900 dark:text-white">Kaji</span>
@@ -28,16 +32,13 @@ export function MainNav({
   );
 
   return (
-    <div className="flex items-center gap-6 flex-wrap">
+    <div className="flex flex-wrap items-center gap-3 sm:gap-6">
       {disableLogoLink ? (
-        <div
-          className="text-7xl font-extrabold tracking-tight"
-          aria-label="KajiShare"
-        >
+        <div className={brandClass} aria-label="KajiShare">
           {logoContent}
         </div>
       ) : (
-        <CustomLink href="/" className="text-7xl font-extrabold tracking-tight">
+        <CustomLink href="/" className={brandClass}>
           {logoContent}
         </CustomLink>
       )}
@@ -49,7 +50,7 @@ export function MainNav({
                 href="/tasks"
                 className={
                   navigationMenuTriggerStyle() +
-                  " text-base md:text-lg font-bold ml-4"
+                  " ml-0 text-sm font-bold sm:ml-2 sm:text-base md:text-lg"
                 }
               >
                 タスク一覧
@@ -60,7 +61,7 @@ export function MainNav({
                 href="/records"
                 className={
                   navigationMenuTriggerStyle() +
-                  " text-base md:text-lg font-bold"
+                  " text-sm font-bold sm:text-base md:text-lg"
                 }
               >
                 担当のタスク
@@ -71,7 +72,7 @@ export function MainNav({
                 href="/evaluations"
                 className={
                   navigationMenuTriggerStyle() +
-                  " text-base md:text-lg font-bold"
+                  " text-sm font-bold sm:text-base md:text-lg"
                 }
               >
                 評価

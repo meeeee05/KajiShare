@@ -14,7 +14,11 @@ export default function Header() {
 
   return (
     <header className="sticky border-b">
-      <div className="flex items-center justify-between w-full pl-4 pr-64 pt-6 pb-6 sm:pl-6 sm:pr-80">
+      <div
+        className={`flex w-full items-start justify-between px-3 sm:items-center sm:px-6 ${
+          isSimpleHeader ? "py-3 sm:py-4" : "py-4 sm:py-5"
+        }`}
+      >
         <MainNav hideMenu={isSimpleHeader} disableLogoLink={disableLogoLink} />
         {!isSimpleHeader && <UserButton />}
       </div>

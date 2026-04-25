@@ -218,7 +218,7 @@ export default function GroupEditableField({
             <select
               value={normalizeAssignMode(draft)}
               onChange={(e) => setDraft(e.target.value)}
-              className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              className={`w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
               aria-label={`${label}入力`}
               disabled={isPending}
             >
@@ -232,7 +232,7 @@ export default function GroupEditableField({
             <select
               value={normalizeBalancedType(draft)}
               onChange={(e) => setDraft(e.target.value)}
-              className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              className={`w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
               aria-label={`${label}入力`}
               disabled={isPending}
             >
@@ -247,7 +247,7 @@ export default function GroupEditableField({
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              className={`min-w-[220px] rounded-md border bg-background px-3 py-2 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              className={`w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
               aria-label={`${label}入力`}
               disabled={isPending}
             />

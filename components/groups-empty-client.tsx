@@ -237,30 +237,30 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
   };
 
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center px-4 text-center">
-      <div className="flex justify-center items-center gap-0.5 mb-6">
-        <span className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">
+    <div className="flex min-h-[60vh] flex-col items-center justify-center px-3 text-center sm:px-4">
+      <div className="mb-6 flex flex-wrap items-center justify-center gap-0.5">
+        <span className="text-3xl font-extrabold tracking-tight leading-none text-slate-900 dark:text-white sm:text-4xl">
           Kaji
         </span>
-        <span className="text-3xl font-extrabold tracking-tight text-blue-600 leading-none ml-0">
+        <span className="ml-0 text-3xl font-extrabold tracking-tight leading-none text-blue-600 sm:text-4xl">
           Share
         </span>
-        <span className="text-xl font-bold ml-2">へようこそ！</span>
+        <span className="ml-2 text-lg font-bold sm:text-xl">へようこそ！</span>
       </div>
-      <p className="mb-6 text-gray-600 max-w-md">
+      <p className="mb-6 max-w-[390px] text-gray-600">
         早速グループを作成しましょう！
       </p>
-      <p className="mb-6 text-gray-600 max-w-md whitespace-nowrap text-left -ml-4">
+      <p className="mb-6 max-w-[390px] text-left text-gray-600">
         グループを登録すると、家事やタスクの進捗を共有できるようになります。
       </p>
-      <div className="w-full max-w-md flex flex-col gap-8 items-center mx-auto">
-        <div className="w-full flex flex-col items-center">
+      <div className="mx-auto flex w-full max-w-[390px] flex-col items-center gap-8">
+        <div className="flex w-full flex-col items-center">
           {error && (
             <p className="mb-2 text-sm text-red-600 text-left">{error}</p>
           )}
           <form
             onSubmit={handleSubmit}
-            className="flex flex-col sm:flex-row gap-0 items-center justify-center w-full"
+            className="flex w-full flex-col items-center justify-center gap-2 sm:flex-row sm:gap-0"
           >
             <input
               type="text"
@@ -269,12 +269,17 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
               placeholder="グループ名を入力"
               className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mx-auto"
             />
-            <Button type="submit" variant="default" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              variant="default"
+              disabled={isSubmitting}
+              className="w-full sm:w-auto"
+            >
               {isSubmitting ? "登録中..." : "作成"}
             </Button>
           </form>
         </div>
-        <div className="w-full flex flex-col items-center">
+        <div className="flex w-full flex-col items-center">
           <p className="mb-3 text-sm text-gray-600">
             招待IDをお持ちの方はこちら
           </p>
@@ -283,7 +288,7 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
           )}
           <form
             onSubmit={handleJoin}
-            className="flex flex-col sm:flex-row gap-0 items-center justify-center w-full"
+            className="flex w-full flex-col items-center justify-center gap-2 sm:flex-row sm:gap-0"
           >
             <input
               type="text"
@@ -292,7 +297,12 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
               placeholder="招待IDを入力"
               className="w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mx-auto"
             />
-            <Button type="submit" variant="outline" disabled={isJoining}>
+            <Button
+              type="submit"
+              variant="outline"
+              disabled={isJoining}
+              className="w-full sm:w-auto"
+            >
               {isJoining ? "参加中..." : "参加"}
             </Button>
           </form>

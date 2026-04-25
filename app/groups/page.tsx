@@ -475,8 +475,8 @@ export default async function GroupsPage() {
   }
 
   return (
-    <div className="prose max-w-none p-6">
-      <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
+    <div className="prose max-w-none p-4 sm:p-6">
+      <div className="not-prose mb-2 flex flex-col items-start justify-between gap-3 border-b-2 border-current pb-1 sm:flex-row sm:items-center">
         <h1 className="text-2xl font-extrabold">グループ設定</h1>
         <Link
           href="/groups/empty?from=groups"
@@ -494,7 +494,7 @@ export default async function GroupsPage() {
         {groupList.map((group, index) => (
           <section
             key={group.id ?? `${group.name}-${index}`}
-            className="rounded-lg border bg-card p-5"
+            className="rounded-lg border bg-card p-4 sm:p-5"
           >
             <GroupEditableField
               groupId={group.id}
@@ -508,7 +508,7 @@ export default async function GroupsPage() {
             />
 
             <div className="mt-4 space-y-3">
-              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+              <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   share_key
                 </span>
@@ -517,7 +517,7 @@ export default async function GroupsPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+              <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   担当割り当て
                 </span>
@@ -532,7 +532,7 @@ export default async function GroupsPage() {
               </div>
 
               {isbalancedAssignMode(group.assign_mode) ? (
-                <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+                <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                   <span className="font-semibold text-slate-600 dark:text-slate-300">
                     負担バランス
                   </span>
@@ -547,7 +547,7 @@ export default async function GroupsPage() {
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+              <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   管理者
                 </span>
@@ -556,7 +556,7 @@ export default async function GroupsPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-[140px_1fr] items-center gap-3 text-base sm:text-lg">
+              <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
                   あなたの権限
                 </span>

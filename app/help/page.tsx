@@ -2,12 +2,12 @@ import HelpContactForm from "@/components/help-contact-form";
 
 export default function HelpPage() {
   return (
-    <div className="prose max-w-none p-6">
+    <div className="prose max-w-none p-4 sm:p-6">
       <div className="mb-2 flex items-center justify-center gap-0">
-        <span className="text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">
+        <span className="text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none sm:text-5xl">
           Kaji
         </span>
-        <span className="text-5xl font-extrabold tracking-tight text-blue-600 leading-none ml-0.4">
+        <span className="ml-0.5 text-4xl font-extrabold tracking-tight leading-none text-blue-600 sm:text-5xl">
           Share
         </span>
       </div>
@@ -21,9 +21,9 @@ export default function HelpPage() {
         タスクの完了状況をリアルタイムで確認できるため、効率的に家事を分担することが可能です。
       </p>
 
-      <h2 className="mt-40 font-extrabold">お問い合わせ</h2>
+      <h2 className="mt-16 font-extrabold sm:mt-32">お問い合わせ</h2>
       <p>ご質問やご意見がある場合は、以下のフォームからご連絡ください。</p>
-      <div className="not-prose max-w-xl">
+      <div className="not-prose w-full max-w-[390px] sm:max-w-xl">
         <HelpContactForm />
       </div>
     </div>
