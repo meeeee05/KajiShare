@@ -7,7 +7,9 @@ import { usePathname } from "next/navigation";
 export default function Header() {
   const pathname = usePathname();
   const isSimpleHeader =
-    pathname === "/auth/signin" || pathname === "/groups/empty";
+    pathname === "/auth/signin" ||
+    pathname === "/auth/timeout" ||
+    pathname === "/groups/empty";
   const disableLogoLink = pathname === "/groups/empty";
 
   return (

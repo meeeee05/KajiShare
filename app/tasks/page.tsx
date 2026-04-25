@@ -191,7 +191,7 @@ export default async function TasksPage() {
   const session = await auth();
 
   if (!session) {
-    redirect("/auth/signin");
+    redirect("/auth/timeout");
   }
 
   const apiUrl = process.env.API_URL;

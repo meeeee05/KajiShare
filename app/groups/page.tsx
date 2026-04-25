@@ -293,9 +293,9 @@ const enrichFallbackNames = async (
 export default async function GroupsPage() {
   const session = await auth();
 
-  // 未サインインならサインインページへ
+  // 未サインインならセッション切れページへ
   if (!session) {
-    redirect("/auth/signin");
+    redirect("/auth/timeout");
   }
 
   const apiUrl = process.env.API_URL;

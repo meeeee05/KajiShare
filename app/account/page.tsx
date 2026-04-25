@@ -6,7 +6,7 @@ export default async function AccountPage() {
   const session = await auth();
 
   if (!session) {
-    redirect("/auth/signin");
+    redirect("/auth/timeout");
   }
 
   const user = session.user;
