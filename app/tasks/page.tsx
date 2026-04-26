@@ -305,6 +305,15 @@ export default async function TasksPage() {
         タスク一覧
       </h1>
 
+      <div className="not-prose mt-4 flex justify-end">
+        <Link
+          href="/tasks/recurring"
+          className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900"
+        >
+          周期タスク管理へ
+        </Link>
+      </div>
+
       <div className="not-prose mt-8 space-y-5">
         {groupsWithTasks.map(({ group, tasks }) => (
           <section
