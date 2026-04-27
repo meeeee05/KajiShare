@@ -30,14 +30,14 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
     const trimmedPoint = point.trim();
     const trimmedDescription = description.trim();
 
-    if (!trimmedName || !trimmedPoint || !trimmedDescription) {
-      setError("家事の名前 / 負担ポイント / 備考 は必須です。");
+    if (!trimmedName || !trimmedPoint) {
+      setError("家事の名前 / 負担ポイント は必須です。");
       return;
     }
 
     const parsedPoint = Number(trimmedPoint);
-    if (!Number.isFinite(parsedPoint)) {
-      setError("負担ポイント は数値で入力してください。");
+    if (!Number.isInteger(parsedPoint) || parsedPoint < 1 || parsedPoint > 5) {
+      setError("負担ポイント は1〜5の整数で選択してください。");
       return;
     }
 
@@ -65,7 +65,7 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
           task: {
             name: trimmedName,
             point: parsedPoint,
-            description: trimmedDescription,
+            description: trimmedDescription || null,
           },
         }),
       }).catch(() => null);
@@ -107,20 +107,28 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
           disabled={isPending || !groupId}
           className="rounded-md border bg-background px-2 py-1 text-sm"
         />
-        <input
-          type="number"
+        <select
           value={point}
           onChange={(e) => setPoint(e.target.value)}
-          placeholder=" 負担ポイント（1〜5）"
           required
           disabled={isPending || !groupId}
-          className="rounded-md border bg-background px-2 py-1 text-sm"
-        />
+          className={`rounded-md border bg-background px-2 py-1 text-sm ${
+            point === "" ? "text-slate-400" : "text-foreground"
+          }`}
+        >
+          <option value="" disabled>
+            負担ポイント（1〜5）
+          </option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+        </select>
         <input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="備考"
-          required
           disabled={isPending || !groupId}
           className="rounded-md border bg-background px-2 py-1 text-sm"
         />
