@@ -17,6 +17,20 @@ type TaskItem = {
   point?: string;
   description?: string;
   createdAt?: string;
+  isRecurring?: boolean;
+  sourceIndex: number;
+};
+
+type RecurringTaskItem = {
+  id?: string;
+  name: string;
+  point?: string;
+  description?: string;
+  scheduleType: "weekly" | "every_n_days" | "";
+  dayOfWeek?: string;
+  intervalDays?: string;
+  startsOn?: string;
+  active: boolean;
   sourceIndex: number;
 };
 
@@ -158,6 +172,98 @@ const extractTasksArray = (payload: unknown): unknown[] => {
   );
 };
 
+const extractRecurringTasksArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const rootData = asRecord(root.data);
+  const rootDataData = asRecord(rootData?.data);
+  const rootRecurring = asRecord(root.recurring_task);
+
+  return firstArray(
+    root.recurring_tasks,
+    root.items,
+    root.results,
+    root.data,
+    rootRecurring?.items,
+    rootRecurring?.recurring_tasks,
+    rootData?.recurring_tasks,
+    rootData?.items,
+    rootData?.results,
+    rootData?.data,
+    rootDataData?.recurring_tasks,
+    rootDataData?.items,
+    rootDataData?.results,
+  );
+};
+
+const normalizeRecurringTask = (row: unknown, index: number): RecurringTaskItem => {
+  const root = asRecord(row);
+  const recurringRoot = asRecord(root?.recurring_task) ?? root;
+  const recurring = unwrapEntity(recurringRoot);
+
+  const scheduleTypeRaw =
+    pickFromSources(recurring, recurringRoot, ["schedule_type", "scheduleType"]) ?? "";
+
+  const scheduleType: RecurringTaskItem["scheduleType"] =
+    scheduleTypeRaw === "weekly"
+      ? "weekly"
+      : scheduleTypeRaw === "every_n_days"
+        ? "every_n_days"
+        : "";
+
+  const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
+  const active = activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
+
+  return {
+    id:
+      pickFromSources(recurring, recurringRoot, ["id", "recurring_task_id"]) ??
+      pickFirstString(root, ["id", "recurring_task_id"]),
+    name:
+      pickFromSources(recurring, recurringRoot, ["name", "title"]) ??
+      `周期タスク ${index + 1}`,
+    point: pickFromSources(recurring, recurringRoot, ["point", "score", "value"]),
+    description: pickFromSources(recurring, recurringRoot, [
+      "description",
+      "detail",
+      "memo",
+    ]),
+    scheduleType,
+    dayOfWeek: pickFromSources(recurring, recurringRoot, ["day_of_week", "dayOfWeek"]),
+    intervalDays: pickFromSources(recurring, recurringRoot, [
+      "interval_days",
+      "intervalDays",
+    ]),
+    startsOn: pickFromSources(recurring, recurringRoot, ["starts_on", "startsOn"]),
+    active,
+    sourceIndex: index,
+  };
+};
+
+const recurringTaskToTask = (
+  recurringTask: RecurringTaskItem,
+  index: number,
+): TaskItem => {
+  const stableId =
+    recurringTask.id ?? `${recurringTask.name}:${recurringTask.sourceIndex}`;
+
+  return {
+    id: `recurring:${stableId}`,
+    name: recurringTask.name,
+    point: recurringTask.point,
+    description: recurringTask.description,
+    createdAt: recurringTask.startsOn,
+    isRecurring: true,
+    sourceIndex: index,
+  };
+};
+
 const normalizeTask = (row: unknown, index: number): TaskItem => {
   const root = asRecord(row);
   const taskRoot = asRecord(root?.task) ?? root;
@@ -260,7 +366,10 @@ export default async function TasksPage() {
   const groupsWithTasks = await Promise.all(
     groups.map(async (group) => {
       if (!group.id) {
-        return { group, tasks: [] as TaskItem[] };
+        return {
+          group,
+          tasks: [] as TaskItem[],
+        };
       }
 
       const candidates = [
@@ -275,6 +384,20 @@ export default async function TasksPage() {
         const data = await fetchOkJson(url);
         if (data != null) {
           payload = data;
+          break;
+        }
+      }
+
+      const recurringCandidates = [
+        `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
+        `${base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
+      ];
+
+      let recurringPayload: unknown | null = null;
+      for (const url of recurringCandidates) {
+        const data = await fetchOkJson(url);
+        if (data != null) {
+          recurringPayload = data;
           break;
         }
       }
@@ -295,7 +418,18 @@ export default async function TasksPage() {
           return a.sourceIndex - b.sourceIndex;
         });
 
-      return { group, tasks };
+      const recurringTasks = extractRecurringTasksArray(recurringPayload)
+        .map(normalizeRecurringTask)
+        .sort((a, b) => a.sourceIndex - b.sourceIndex);
+
+      const mergedTasks = [
+        ...tasks,
+        ...recurringTasks.map((task, index) =>
+          recurringTaskToTask(task, tasks.length + index),
+        ),
+      ];
+
+      return { group, tasks: mergedTasks };
     }),
   );
 
@@ -361,11 +495,15 @@ export default async function TasksPage() {
                           {task.description ?? "-"}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          <TaskDeleteButton
-                            taskId={task.id}
-                            groupId={group.id}
-                            apiUrl={apiUrl}
-                          />
+                          {task.isRecurring ? (
+                            <span className="text-xs text-slate-400">-</span>
+                          ) : (
+                            <TaskDeleteButton
+                              taskId={task.id}
+                              groupId={group.id}
+                              apiUrl={apiUrl}
+                            />
+                          )}
                         </td>
                       </tr>
                     ))}

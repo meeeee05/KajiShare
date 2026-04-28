@@ -34,6 +34,20 @@ type TaskItem = {
   createdAt?: string;
   assignmentId?: string;
   assignmentStatus?: string;
+  isRecurring?: boolean;
+  sourceIndex: number;
+};
+
+type RecurringTaskItem = {
+  id?: string;
+  name: string;
+  description?: string;
+  point?: string;
+  scheduleType: "weekly" | "every_n_days" | "";
+  dayOfWeek?: string;
+  intervalDays?: string;
+  startsOn?: string;
+  active: boolean;
   sourceIndex: number;
 };
 
@@ -355,6 +369,37 @@ const extractTasksArray = (payload: unknown): unknown[] => {
   );
 };
 
+const extractRecurringTasksArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const rootData = asRecord(root.data);
+  const rootDataData = asRecord(rootData?.data);
+  const rootRecurring = asRecord(root.recurring_task);
+
+  return firstArray(
+    root.recurring_tasks,
+    root.items,
+    root.results,
+    root.data,
+    rootRecurring?.items,
+    rootRecurring?.recurring_tasks,
+    rootData?.recurring_tasks,
+    rootData?.items,
+    rootData?.results,
+    rootData?.data,
+    rootDataData?.recurring_tasks,
+    rootDataData?.items,
+    rootDataData?.results,
+  );
+};
+
 const normalizeTask = (row: unknown, index: number): TaskItem => {
   const root = asRecord(row);
   const taskRoot = asRecord(root?.task) ?? root;
@@ -393,6 +438,123 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
       "comment",
     ]),
     sourceIndex: index,
+  };
+};
+
+const normalizeRecurringTask = (
+  row: unknown,
+  index: number,
+): RecurringTaskItem => {
+  const root = asRecord(row);
+  const recurringRoot = asRecord(root?.recurring_task) ?? root;
+  const recurring = unwrapEntity(recurringRoot);
+
+  const scheduleTypeRaw =
+    pickFromSources(recurring, recurringRoot, ["schedule_type", "scheduleType"])
+    ?? "";
+
+  const scheduleType: RecurringTaskItem["scheduleType"] =
+    scheduleTypeRaw === "weekly"
+      ? "weekly"
+      : scheduleTypeRaw === "every_n_days"
+        ? "every_n_days"
+        : "";
+
+  const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
+  const active = activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
+
+  return {
+    id:
+      pickFromSources(recurring, recurringRoot, ["id", "recurring_task_id"]) ??
+      pickFirstString(root, ["id", "recurring_task_id"]),
+    name:
+      pickFromSources(recurring, recurringRoot, ["name", "title"]) ??
+      `周期タスク ${index + 1}`,
+    description: pickFromSources(recurring, recurringRoot, [
+      "description",
+      "detail",
+      "memo",
+    ]),
+    point: pickFromSources(recurring, recurringRoot, ["point", "score", "value"]),
+    scheduleType,
+    dayOfWeek: pickFromSources(recurring, recurringRoot, ["day_of_week", "dayOfWeek"]),
+    intervalDays: pickFromSources(recurring, recurringRoot, [
+      "interval_days",
+      "intervalDays",
+    ]),
+    startsOn: pickFromSources(recurring, recurringRoot, ["starts_on", "startsOn"]),
+    active,
+    sourceIndex: index,
+  };
+};
+
+const dateFromYmd = (value?: string) => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return undefined;
+  }
+
+  const date = new Date(`${value}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) {
+    return undefined;
+  }
+
+  return date;
+};
+
+const recurringTaskRunsOnDate = (task: RecurringTaskItem, ymd: string) => {
+  if (!task.active) {
+    return false;
+  }
+
+  if (!task.startsOn) {
+    return false;
+  }
+
+  const targetDate = dateFromYmd(ymd);
+  const startDate = dateFromYmd(task.startsOn);
+  if (!targetDate || !startDate) {
+    return false;
+  }
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const diffDays = Math.floor((targetDate.getTime() - startDate.getTime()) / msPerDay);
+
+  if (diffDays < 0) {
+    return false;
+  }
+
+  if (task.scheduleType === "weekly") {
+    const day = Number(task.dayOfWeek);
+    if (!Number.isInteger(day) || day < 0 || day > 6) {
+      return false;
+    }
+
+    return targetDate.getUTCDay() === day;
+  }
+
+  if (task.scheduleType === "every_n_days") {
+    const interval = Number(task.intervalDays);
+    if (!Number.isInteger(interval) || interval <= 0) {
+      return false;
+    }
+
+    return diffDays % interval === 0;
+  }
+
+  return false;
+};
+
+const recurringTaskToTask = (task: RecurringTaskItem, sourceIndex: number): TaskItem => {
+  const stableId = task.id ?? `${task.name}:${task.sourceIndex}`;
+
+  return {
+    id: `recurring:${stableId}`,
+    name: task.name,
+    point: task.point,
+    description: task.description,
+    createdAt: task.startsOn,
+    isRecurring: true,
+    sourceIndex,
   };
 };
 
@@ -1182,6 +1344,11 @@ export default async function RecordsPage() {
         `${base}/tasks?group_id=${encodeURIComponent(group.id)}`,
       ];
 
+      const recurringCandidates = [
+        `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
+        `${base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
+      ];
+
       const assignmentCandidates = [
         `${v1Base}/groups/${encodeURIComponent(group.id)}/assignments`,
         `${base}/groups/${encodeURIComponent(group.id)}/assignments`,
@@ -1207,17 +1374,32 @@ export default async function RecordsPage() {
         }
       }
 
+      let recurringPayload: unknown | null = null;
+      for (const url of recurringCandidates) {
+        const data = await fetchOkJson(url);
+        if (data != null) {
+          recurringPayload = data;
+          break;
+        }
+      }
+
       const assignments =
         extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment);
 
-      const tasks = sortTasksForAssignment(
-        extractTasksArray(tasksPayload).map(normalizeTask),
-      );
+      const normalTasks = extractTasksArray(tasksPayload).map(normalizeTask);
+      const recurringTasks = extractRecurringTasksArray(recurringPayload)
+        .map(normalizeRecurringTask)
+        .filter((task) => recurringTaskRunsOnDate(task, todayKey))
+        .map((task, index) => recurringTaskToTask(task, normalTasks.length + index));
+
+      const tasks = sortTasksForAssignment([...normalTasks, ...recurringTasks]);
 
       recordsDebugLog("group-source-counts", {
         groupId: group.id,
         groupName: group.name,
         tasksCount: tasks.length,
+        normalTasksCount: normalTasks.length,
+        recurringTasksCount: recurringTasks.length,
         assignmentsCount: assignments.length,
       });
 
@@ -1419,14 +1601,20 @@ export default async function RecordsPage() {
                           {task.description ?? "-"}
                         </td>
                         <td className="px-3 py-2">
-                          <AssignmentStatusButton
-                            assignmentId={task.assignmentId}
-                            taskId={task.id}
-                            groupId={group.id}
-                            currentStatus={task.assignmentStatus}
-                            apiUrl={apiUrl}
-                            showDeleteWhenCompleted
-                          />
+                          {task.isRecurring ? (
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200">
+                              周期タスク（割り当て）
+                            </span>
+                          ) : (
+                            <AssignmentStatusButton
+                              assignmentId={task.assignmentId}
+                              taskId={task.id}
+                              groupId={group.id}
+                              currentStatus={task.assignmentStatus}
+                              apiUrl={apiUrl}
+                              showDeleteWhenCompleted
+                            />
+                          )}
                         </td>
                       </tr>
                     ))}
