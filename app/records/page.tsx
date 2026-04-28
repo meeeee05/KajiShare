@@ -64,6 +64,8 @@ type AssignmentItem = {
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
+const APP_TIME_ZONE = process.env.APP_TIME_ZONE ?? "Asia/Tokyo";
+
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -450,18 +452,25 @@ const normalizeRecurringTask = (
   const recurring = unwrapEntity(recurringRoot);
 
   const scheduleTypeRaw =
-    pickFromSources(recurring, recurringRoot, ["schedule_type", "scheduleType"])
-    ?? "";
+    pickFromSources(recurring, recurringRoot, [
+      "schedule_type",
+      "scheduleType",
+    ]) ?? "";
 
+  const scheduleTypeNormalized = normalizeText(scheduleTypeRaw);
   const scheduleType: RecurringTaskItem["scheduleType"] =
-    scheduleTypeRaw === "weekly"
+    scheduleTypeNormalized === "weekly" ||
+    scheduleTypeNormalized === "week" ||
+    scheduleTypeNormalized === "every_week"
       ? "weekly"
-      : scheduleTypeRaw === "every_n_days"
+      : scheduleTypeNormalized === "every_n_days" ||
+          scheduleTypeNormalized === "everyndays"
         ? "every_n_days"
         : "";
 
   const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
-  const active = activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
+  const active =
+    activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
 
   return {
     id:
@@ -475,30 +484,90 @@ const normalizeRecurringTask = (
       "detail",
       "memo",
     ]),
-    point: pickFromSources(recurring, recurringRoot, ["point", "score", "value"]),
+    point: pickFromSources(recurring, recurringRoot, [
+      "point",
+      "score",
+      "value",
+    ]),
     scheduleType,
-    dayOfWeek: pickFromSources(recurring, recurringRoot, ["day_of_week", "dayOfWeek"]),
+    dayOfWeek: pickFromSources(recurring, recurringRoot, [
+      "day_of_week",
+      "dayOfWeek",
+    ]),
     intervalDays: pickFromSources(recurring, recurringRoot, [
       "interval_days",
       "intervalDays",
     ]),
-    startsOn: pickFromSources(recurring, recurringRoot, ["starts_on", "startsOn"]),
+    startsOn: pickFromSources(recurring, recurringRoot, [
+      "starts_on",
+      "startsOn",
+    ]),
     active,
     sourceIndex: index,
   };
 };
 
 const dateFromYmd = (value?: string) => {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (!value) {
     return undefined;
   }
 
-  const date = new Date(`${value}T00:00:00Z`);
+  const ymd = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+    return undefined;
+  }
+
+  const date = new Date(`${ymd}T00:00:00Z`);
   if (!Number.isFinite(date.getTime())) {
     return undefined;
   }
 
   return date;
+};
+
+const parseRecurringDayOfWeek = (value?: string) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = normalizeText(value).replace("曜日", "");
+
+  const numeric = Number(normalized);
+  if (Number.isInteger(numeric)) {
+    if (numeric >= 0 && numeric <= 6) {
+      return numeric;
+    }
+
+    if (numeric >= 1 && numeric <= 7) {
+      return numeric % 7;
+    }
+  }
+
+  const map: Record<string, number> = {
+    sun: 0,
+    sunday: 0,
+    "日": 0,
+    mon: 1,
+    monday: 1,
+    "月": 1,
+    tue: 2,
+    tuesday: 2,
+    "火": 2,
+    wed: 3,
+    wednesday: 3,
+    "水": 3,
+    thu: 4,
+    thursday: 4,
+    "木": 4,
+    fri: 5,
+    friday: 5,
+    "金": 5,
+    sat: 6,
+    saturday: 6,
+    "土": 6,
+  };
+
+  return map[normalized];
 };
 
 const recurringTaskRunsOnDate = (task: RecurringTaskItem, ymd: string) => {
@@ -517,16 +586,23 @@ const recurringTaskRunsOnDate = (task: RecurringTaskItem, ymd: string) => {
   }
 
   const msPerDay = 24 * 60 * 60 * 1000;
-  const diffDays = Math.floor((targetDate.getTime() - startDate.getTime()) / msPerDay);
+  const diffDays = Math.floor(
+    (targetDate.getTime() - startDate.getTime()) / msPerDay,
+  );
 
   if (diffDays < 0) {
     return false;
   }
 
+  // A recurring task should always run on its start date.
+  if (diffDays === 0) {
+    return true;
+  }
+
   if (task.scheduleType === "weekly") {
-    const day = Number(task.dayOfWeek);
-    if (!Number.isInteger(day) || day < 0 || day > 6) {
-      return false;
+    const day = parseRecurringDayOfWeek(task.dayOfWeek);
+    if (day == null) {
+      return diffDays % 7 === 0;
     }
 
     return targetDate.getUTCDay() === day;
@@ -544,7 +620,10 @@ const recurringTaskRunsOnDate = (task: RecurringTaskItem, ymd: string) => {
   return false;
 };
 
-const recurringTaskToTask = (task: RecurringTaskItem, sourceIndex: number): TaskItem => {
+const recurringTaskToTask = (
+  task: RecurringTaskItem,
+  sourceIndex: number,
+): TaskItem => {
   const stableId = task.id ?? `${task.name}:${task.sourceIndex}`;
 
   return {
@@ -1302,7 +1381,9 @@ export default async function RecordsPage() {
     email: currentUserFromApi.email ?? session.user?.email ?? undefined,
   };
 
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: APP_TIME_ZONE,
+  }).format(new Date());
 
   const groupsWithAssignments = await Promise.all(
     groups.map(async (group) => {
@@ -1390,7 +1471,9 @@ export default async function RecordsPage() {
       const recurringTasks = extractRecurringTasksArray(recurringPayload)
         .map(normalizeRecurringTask)
         .filter((task) => recurringTaskRunsOnDate(task, todayKey))
-        .map((task, index) => recurringTaskToTask(task, normalTasks.length + index));
+        .map((task, index) =>
+          recurringTaskToTask(task, normalTasks.length + index),
+        );
 
       const tasks = sortTasksForAssignment([...normalTasks, ...recurringTasks]);
 

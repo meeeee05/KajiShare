@@ -203,13 +203,19 @@ const extractRecurringTasksArray = (payload: unknown): unknown[] => {
   );
 };
 
-const normalizeRecurringTask = (row: unknown, index: number): RecurringTaskItem => {
+const normalizeRecurringTask = (
+  row: unknown,
+  index: number,
+): RecurringTaskItem => {
   const root = asRecord(row);
   const recurringRoot = asRecord(root?.recurring_task) ?? root;
   const recurring = unwrapEntity(recurringRoot);
 
   const scheduleTypeRaw =
-    pickFromSources(recurring, recurringRoot, ["schedule_type", "scheduleType"]) ?? "";
+    pickFromSources(recurring, recurringRoot, [
+      "schedule_type",
+      "scheduleType",
+    ]) ?? "";
 
   const scheduleType: RecurringTaskItem["scheduleType"] =
     scheduleTypeRaw === "weekly"
@@ -219,7 +225,8 @@ const normalizeRecurringTask = (row: unknown, index: number): RecurringTaskItem 
         : "";
 
   const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
-  const active = activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
+  const active =
+    activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
 
   return {
     id:
@@ -228,19 +235,29 @@ const normalizeRecurringTask = (row: unknown, index: number): RecurringTaskItem 
     name:
       pickFromSources(recurring, recurringRoot, ["name", "title"]) ??
       `周期タスク ${index + 1}`,
-    point: pickFromSources(recurring, recurringRoot, ["point", "score", "value"]),
+    point: pickFromSources(recurring, recurringRoot, [
+      "point",
+      "score",
+      "value",
+    ]),
     description: pickFromSources(recurring, recurringRoot, [
       "description",
       "detail",
       "memo",
     ]),
     scheduleType,
-    dayOfWeek: pickFromSources(recurring, recurringRoot, ["day_of_week", "dayOfWeek"]),
+    dayOfWeek: pickFromSources(recurring, recurringRoot, [
+      "day_of_week",
+      "dayOfWeek",
+    ]),
     intervalDays: pickFromSources(recurring, recurringRoot, [
       "interval_days",
       "intervalDays",
     ]),
-    startsOn: pickFromSources(recurring, recurringRoot, ["starts_on", "startsOn"]),
+    startsOn: pickFromSources(recurring, recurringRoot, [
+      "starts_on",
+      "startsOn",
+    ]),
     active,
     sourceIndex: index,
   };
