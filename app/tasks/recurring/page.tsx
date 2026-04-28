@@ -189,10 +189,18 @@ export default async function RecurringTasksPage({
   ]);
 
   const sortedGroups = [...groups].sort((a, b) => {
-    if (selectedGroupId && a.id === selectedGroupId && b.id !== selectedGroupId) {
+    if (
+      selectedGroupId &&
+      a.id === selectedGroupId &&
+      b.id !== selectedGroupId
+    ) {
       return -1;
     }
-    if (selectedGroupId && b.id === selectedGroupId && a.id !== selectedGroupId) {
+    if (
+      selectedGroupId &&
+      b.id === selectedGroupId &&
+      a.id !== selectedGroupId
+    ) {
       return 1;
     }
     return a.name.localeCompare(b.name, "ja");
@@ -204,7 +212,7 @@ export default async function RecurringTasksPage({
         <div>
           <h1 className="text-2xl font-extrabold">周期タスク管理</h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            毎週 / N日おきの自動生成タスクを設定できます。
+            毎週実施するタスクを自動で設定できます。
           </p>
         </div>
         <Link
@@ -232,8 +240,12 @@ export default async function RecurringTasksPage({
 
             const canManage =
               !hasOwnerSignal ||
-              (ownerIds.length > 0 && meId.length > 0 && ownerIds.includes(meId)) ||
-              (ownerEmail.length > 0 && meEmail.length > 0 && ownerEmail === meEmail);
+              (ownerIds.length > 0 &&
+                meId.length > 0 &&
+                ownerIds.includes(meId)) ||
+              (ownerEmail.length > 0 &&
+                meEmail.length > 0 &&
+                ownerEmail === meEmail);
 
             return (
               <section
@@ -241,7 +253,9 @@ export default async function RecurringTasksPage({
                 className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-950 sm:p-5"
               >
                 <div className="mb-3 flex items-center gap-2">
-                  <h2 className="text-lg font-bold tracking-tight">{group.name}</h2>
+                  <h2 className="text-lg font-bold tracking-tight">
+                    {group.name}
+                  </h2>
                   {selectedGroupId && group.id === selectedGroupId ? (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200">
                       選択中

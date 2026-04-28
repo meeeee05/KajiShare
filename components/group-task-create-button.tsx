@@ -94,10 +94,7 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
   };
 
   return (
-    <form
-      onSubmit={onCreate}
-      className="w-full rounded-md border p-3"
-    >
+    <form onSubmit={onCreate} className="w-full rounded-md border p-3">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_minmax(0,2.2fr)_auto] sm:items-center">
         <input
           value={name}

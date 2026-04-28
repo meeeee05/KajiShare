@@ -179,10 +179,18 @@ const normalizeRow = (row: unknown, index: number): RecurringTask => {
     interval_days: toInt(
       pickFromSources(record, recordRoot, ["interval_days", "intervalDays"]),
     ),
-    starts_on: pickFromSources(record, recordRoot, ["starts_on", "startsOn"]) ?? "",
-    active: activeRaw == null ? true : activeRaw === "true" || activeRaw === "1",
-    created_at: pickFromSources(record, recordRoot, ["created_at", "createdAt"]),
-    updated_at: pickFromSources(record, recordRoot, ["updated_at", "updatedAt"]),
+    starts_on:
+      pickFromSources(record, recordRoot, ["starts_on", "startsOn"]) ?? "",
+    active:
+      activeRaw == null ? true : activeRaw === "true" || activeRaw === "1",
+    created_at: pickFromSources(record, recordRoot, [
+      "created_at",
+      "createdAt",
+    ]),
+    updated_at: pickFromSources(record, recordRoot, [
+      "updated_at",
+      "updatedAt",
+    ]),
   };
 };
 
@@ -238,16 +246,11 @@ const buildPayload = (values: FormValues) => {
     name: values.name.trim(),
     description: values.description.trim() || null,
     point,
-    schedule_type: values.schedule_type,
+    schedule_type: "weekly",
     starts_on: values.starts_on,
     active: values.active,
+    day_of_week: Number(values.day_of_week),
   };
-
-  if (values.schedule_type === "weekly") {
-    recurringTask.day_of_week = Number(values.day_of_week);
-  } else {
-    recurringTask.interval_days = Number(values.interval_days);
-  }
 
   return { recurring_task: recurringTask };
 };
@@ -271,22 +274,9 @@ const validateValues = (values: FormValues): FormErrors => {
     errors.starts_on = "開始日は必須です。";
   }
 
-  if (values.schedule_type !== "weekly" && values.schedule_type !== "every_n_days") {
-    errors.schedule_type = "周期タイプが不正です。";
-  }
-
-  if (values.schedule_type === "weekly") {
-    const day = Number(values.day_of_week);
-    if (!Number.isInteger(day) || day < 0 || day > 6) {
-      errors.day_of_week = "曜日は0〜6で指定してください。";
-    }
-  }
-
-  if (values.schedule_type === "every_n_days") {
-    const interval = Number(values.interval_days);
-    if (!Number.isInteger(interval) || interval < 1) {
-      errors.interval_days = "N日おきは1以上の整数で入力してください。";
-    }
+  const day = Number(values.day_of_week);
+  if (!Number.isInteger(day) || day < 0 || day > 6) {
+    errors.day_of_week = "開始曜日は0〜6で選択してください。";
   }
 
   return errors;
@@ -296,14 +286,18 @@ const recurringTaskToFormValues = (task: RecurringTask): FormValues => ({
   name: task.name,
   description: task.description ?? "",
   point: String(task.point),
-  schedule_type: task.schedule_type,
+  schedule_type: "weekly",
   starts_on: task.starts_on,
   day_of_week: String(task.day_of_week ?? 1),
-  interval_days: String(task.interval_days ?? ""),
+  interval_days: "",
   active: task.active,
 });
 
-export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Props) {
+export default function RecurringTaskManager({
+  groupId,
+  apiUrl,
+  canManage,
+}: Props) {
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [rows, setRows] = useState<RecurringTask[]>([]);
@@ -352,7 +346,9 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
         setRows(normalized);
       })
       .catch((error) => {
-        setNotice(error instanceof Error ? error.message : "一覧取得に失敗しました。");
+        setNotice(
+          error instanceof Error ? error.message : "一覧取得に失敗しました。",
+        );
       })
       .finally(() => {
         setLoading(false);
@@ -362,16 +358,6 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
   useEffect(() => {
     loadRows();
   }, [groupId, v1Base, token]);
-
-  const onScheduleTypeChange = (value: ScheduleType) => {
-    setFormValues((prev) => ({
-      ...prev,
-      schedule_type: value,
-      day_of_week: value === "weekly" ? prev.day_of_week || "1" : "",
-      interval_days: value === "every_n_days" ? prev.interval_days : "",
-    }));
-    setFormErrors((prev) => ({ ...prev, day_of_week: undefined, interval_days: undefined }));
-  };
 
   const startCreate = () => {
     setEditingId(null);
@@ -391,12 +377,15 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
     setFormErrors({});
 
     startTransition(async () => {
-      const res = await fetch(`${v1Base}/recurring_tasks/${encodeURIComponent(id)}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${v1Base}/recurring_tasks/${encodeURIComponent(id)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
         },
-        cache: "no-store",
-      }).catch(() => null);
+      ).catch(() => null);
 
       if (!res) {
         setNotice("周期タスク詳細の取得に失敗しました。");
@@ -437,7 +426,7 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
       return;
     }
 
-    if (!canManage) {
+    if (editingId && !canManage) {
       setNotice("管理者のみ操作できます。");
       return;
     }
@@ -493,7 +482,9 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
       }
 
       setFormErrors({});
-      setNotice(editingId ? "周期タスクを更新しました。" : "周期タスクを作成しました。");
+      setNotice(
+        editingId ? "周期タスクを更新しました。" : "周期タスクを作成しました。",
+      );
       setEditingId(null);
       setShowForm(false);
       setFormValues(defaultFormValues());
@@ -518,12 +509,15 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
     }
 
     startTransition(async () => {
-      const res = await fetch(`${v1Base}/recurring_tasks/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const res = await fetch(
+        `${v1Base}/recurring_tasks/${encodeURIComponent(id)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         },
-      }).catch(() => null);
+      ).catch(() => null);
 
       if (!res) {
         setNotice("周期タスク削除に失敗しました。");
@@ -564,41 +558,45 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
     <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3 sm:p-4 dark:border-slate-800 dark:bg-slate-900/40">
       <div className="mb-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
         <h3 className="text-sm font-semibold sm:text-base">周期タスク</h3>
-        {canManage ? (
-          <div className="flex items-center gap-3">
-            {showForm ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingId(null);
-                  setFormErrors({});
-                  setNotice(null);
-                }}
-                className="text-xs font-semibold text-slate-500 hover:underline disabled:opacity-60"
-                disabled={isPending}
-              >
-                フォームを閉じる
-              </button>
-            ) : null}
+        <div className="flex items-center gap-3">
+          {showForm ? (
             <button
               type="button"
-              onClick={startCreate}
-              className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-60"
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setFormErrors({});
+                setNotice(null);
+              }}
+              className="text-xs font-semibold text-slate-500 hover:underline disabled:opacity-60"
               disabled={isPending}
             >
-              新規作成
+              フォームを閉じる
             </button>
-          </div>
-        ) : (
-          <span className="text-xs text-slate-500">管理者のみ編集可能</span>
-        )}
+          ) : null}
+          <button
+            type="button"
+            onClick={startCreate}
+            className="text-xs font-semibold text-blue-600 hover:underline disabled:opacity-60"
+            disabled={isPending}
+          >
+            新規作成
+          </button>
+        </div>
       </div>
+
+      {!canManage ? (
+        <p className="mb-2 text-xs text-slate-500">
+          新規作成は可能です。編集・削除は管理者のみ操作できます。
+        </p>
+      ) : null}
 
       {loading ? <p className="text-xs text-slate-500">読み込み中...</p> : null}
 
       {!loading && rows.length === 0 ? (
-        <p className="mb-3 text-xs text-slate-500">周期タスクはまだありません。</p>
+        <p className="mb-3 text-xs text-slate-500">
+          周期タスクはまだありません。
+        </p>
       ) : null}
 
       {rows.length > 0 ? (
@@ -617,7 +615,9 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
               {rows.map((row) => (
                 <tr key={row.id} className="border-t align-top">
                   <td className="px-2 py-2">{row.name}</td>
-                  <td className="px-2 py-2">{scheduleTypeLabel(row.schedule_type)}</td>
+                  <td className="px-2 py-2">
+                    {scheduleTypeLabel(row.schedule_type)}
+                  </td>
                   <td className="px-2 py-2">{row.starts_on}</td>
                   <td className="px-2 py-2">{row.active ? "ON" : "OFF"}</td>
                   <td className="px-2 py-2">
@@ -651,74 +651,43 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
         </div>
       ) : null}
 
-      {canManage && showForm ? (
+      {showForm ? (
         <form onSubmit={onSubmit} className="space-y-3 rounded-md border p-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-xs sm:text-sm">
-            <span className="mb-1 block font-semibold">名前</span>
-            <input
-              value={formValues.name}
-              onChange={(e) => setFormValues((prev) => ({ ...prev, name: e.target.value }))}
-              className="w-full rounded-md border bg-background px-2 py-1"
-              maxLength={50}
-              disabled={isPending}
-              required
-            />
-            {formErrors.name ? <span className="text-xs text-red-600">{formErrors.name}</span> : null}
-          </label>
-
-          <label className="text-xs sm:text-sm">
-            <span className="mb-1 block font-semibold">負担ポイント（1〜5）</span>
-            <input
-              type="number"
-              min={1}
-              max={5}
-              value={formValues.point}
-              onChange={(e) => setFormValues((prev) => ({ ...prev, point: e.target.value }))}
-              className="w-full rounded-md border bg-background px-2 py-1"
-              disabled={isPending}
-              required
-            />
-            {formErrors.point ? <span className="text-xs text-red-600">{formErrors.point}</span> : null}
-          </label>
-
-          <label className="text-xs sm:text-sm">
-            <span className="mb-1 block font-semibold">周期タイプ</span>
-            <select
-              value={formValues.schedule_type}
-              onChange={(e) => onScheduleTypeChange(e.target.value as ScheduleType)}
-              className="w-full rounded-md border bg-background px-2 py-1"
-              disabled={isPending}
-            >
-              <option value="weekly">weekly</option>
-              <option value="every_n_days">every_n_days</option>
-            </select>
-            {formErrors.schedule_type ? (
-              <span className="text-xs text-red-600">{formErrors.schedule_type}</span>
-            ) : null}
-          </label>
-
-          <label className="text-xs sm:text-sm">
-            <span className="mb-1 block font-semibold">開始日</span>
-            <input
-              type="date"
-              value={formValues.starts_on}
-              onChange={(e) => setFormValues((prev) => ({ ...prev, starts_on: e.target.value }))}
-              className="w-full rounded-md border bg-background px-2 py-1"
-              disabled={isPending}
-              required
-            />
-            {formErrors.starts_on ? (
-              <span className="text-xs text-red-600">{formErrors.starts_on}</span>
-            ) : null}
-          </label>
-
-          {formValues.schedule_type === "weekly" ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-xs sm:text-sm">
-              <span className="mb-1 block font-semibold">曜日</span>
+              <span className="mb-1 block font-semibold">名前</span>
+              <input
+                value={formValues.name}
+                onChange={(e) =>
+                  setFormValues((prev) => ({ ...prev, name: e.target.value }))
+                }
+                className="w-full rounded-md border bg-background px-2 py-1"
+                maxLength={50}
+                disabled={isPending}
+                required
+              />
+              {formErrors.name ? (
+                <span className="text-xs text-red-600">{formErrors.name}</span>
+              ) : null}
+            </label>
+
+            <div className="text-xs sm:text-sm">
+              <span className="mb-1 block font-semibold">周期タイプ</span>
+              <div className="rounded-md border bg-muted/40 px-2 py-1 text-slate-700 dark:text-slate-200">
+                毎週
+              </div>
+            </div>
+
+            <label className="text-xs sm:text-sm">
+              <span className="mb-1 block font-semibold">開始曜日</span>
               <select
                 value={formValues.day_of_week}
-                onChange={(e) => setFormValues((prev) => ({ ...prev, day_of_week: e.target.value }))}
+                onChange={(e) =>
+                  setFormValues((prev) => ({
+                    ...prev,
+                    day_of_week: e.target.value,
+                  }))
+                }
                 className="w-full rounded-md border bg-background px-2 py-1"
                 disabled={isPending}
               >
@@ -729,77 +698,128 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
                 ))}
               </select>
               {formErrors.day_of_week ? (
-                <span className="text-xs text-red-600">{formErrors.day_of_week}</span>
+                <span className="text-xs text-red-600">
+                  {formErrors.day_of_week}
+                </span>
               ) : null}
             </label>
-          ) : (
+
             <label className="text-xs sm:text-sm">
-              <span className="mb-1 block font-semibold">N日おき</span>
+              <span className="mb-1 block font-semibold">
+                負担ポイント（1〜5）
+              </span>
               <input
                 type="number"
                 min={1}
-                value={formValues.interval_days}
-                onChange={(e) => setFormValues((prev) => ({ ...prev, interval_days: e.target.value }))}
+                max={5}
+                value={formValues.point}
+                onChange={(e) =>
+                  setFormValues((prev) => ({ ...prev, point: e.target.value }))
+                }
                 className="w-full rounded-md border bg-background px-2 py-1"
                 disabled={isPending}
+                required
               />
-              {formErrors.interval_days ? (
-                <span className="text-xs text-red-600">{formErrors.interval_days}</span>
+              {formErrors.point ? (
+                <span className="text-xs text-red-600">{formErrors.point}</span>
               ) : null}
             </label>
-          )}
 
-          {editingId ? (
-            <label className="flex items-center gap-2 text-xs sm:text-sm">
+            <label className="text-xs sm:text-sm">
+              <span className="mb-1 block font-semibold">開始日</span>
               <input
-                type="checkbox"
-                checked={formValues.active}
-                onChange={(e) => setFormValues((prev) => ({ ...prev, active: e.target.checked }))}
+                type="date"
+                value={formValues.starts_on}
+                onChange={(e) =>
+                  setFormValues((prev) => ({
+                    ...prev,
+                    starts_on: e.target.value,
+                  }))
+                }
+                className="w-full rounded-md border bg-background px-2 py-1"
                 disabled={isPending}
+                required
               />
-              <span className="font-semibold">有効（active）</span>
+              {formErrors.starts_on ? (
+                <span className="text-xs text-red-600">
+                  {formErrors.starts_on}
+                </span>
+              ) : null}
             </label>
+
+            {formErrors.schedule_type ? (
+              <p className="text-xs text-red-600">{formErrors.schedule_type}</p>
+            ) : null}
+
+            {editingId ? (
+              <label className="flex items-center gap-2 text-xs sm:text-sm">
+                <input
+                  type="checkbox"
+                  checked={formValues.active}
+                  onChange={(e) =>
+                    setFormValues((prev) => ({
+                      ...prev,
+                      active: e.target.checked,
+                    }))
+                  }
+                  disabled={isPending}
+                />
+                <span className="font-semibold">有効（active）</span>
+              </label>
+            ) : null}
+          </div>
+
+          <label className="text-xs sm:text-sm">
+            <span className="mb-1 block font-semibold">説明（任意）</span>
+            <textarea
+              value={formValues.description}
+              onChange={(e) =>
+                setFormValues((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
+              className="min-h-20 w-full rounded-md border bg-background px-2 py-1"
+              disabled={isPending}
+            />
+          </label>
+
+          {formErrors.base ? (
+            <p className="text-xs text-red-600">{formErrors.base}</p>
           ) : null}
-        </div>
+          {notice ? (
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {notice}
+            </p>
+          ) : null}
 
-        <label className="text-xs sm:text-sm">
-          <span className="mb-1 block font-semibold">説明（任意）</span>
-          <textarea
-            value={formValues.description}
-            onChange={(e) => setFormValues((prev) => ({ ...prev, description: e.target.value }))}
-            className="min-h-20 w-full rounded-md border bg-background px-2 py-1"
-            disabled={isPending}
-          />
-        </label>
-
-        {formErrors.base ? <p className="text-xs text-red-600">{formErrors.base}</p> : null}
-        {notice ? <p className="text-xs text-slate-600 dark:text-slate-300">{notice}</p> : null}
-
-        <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-            disabled={isPending}
-          >
-            {editingId ? "更新する" : "作成する"}
-          </button>
-          {editingId ? (
+          <div className="flex items-center gap-3">
             <button
-              type="button"
-              onClick={startCreate}
-              className="text-xs font-semibold text-slate-500 hover:underline disabled:opacity-60"
+              type="submit"
+              className="rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
               disabled={isPending}
             >
-              編集をキャンセル
+              {editingId ? "更新する" : "作成する"}
             </button>
-          ) : null}
-        </div>
+            {editingId ? (
+              <button
+                type="button"
+                onClick={startCreate}
+                className="text-xs font-semibold text-slate-500 hover:underline disabled:opacity-60"
+                disabled={isPending}
+              >
+                編集をキャンセル
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : null}
 
-      {canManage && !showForm ? (
+      {!showForm ? (
         <p className="text-xs text-slate-500">
-          「新規作成」または一覧の「編集」からフォームを開けます。
+          {canManage
+            ? "「新規作成」または一覧の「編集」からフォームを開けます。"
+            : "「新規作成」から登録できます。"}
         </p>
       ) : null}
     </div>

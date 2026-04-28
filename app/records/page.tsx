@@ -1001,15 +1001,15 @@ const assignTasksBalancedGlobally = (
 
 const assignmentModeLabel = (mode: GroupItem["assignMode"]) => {
   if (mode === "manual") {
-    return "manual";
+    return "手動で決める";
   }
   if (mode === "random") {
-    return "random";
+    return "ランダムで決める";
   }
   if (mode === "balanced") {
-    return "balanced";
+    return "バランスを考慮する";
   }
-  return "未設定";
+  return "ランダムで決める";
 };
 
 const balanceTypeLabel = (value: GroupItem["balanceType"]) => {
