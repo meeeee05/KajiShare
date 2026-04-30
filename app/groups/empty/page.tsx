@@ -26,7 +26,12 @@ export default async function EmptyGroupsPage() {
       cache: "no-store",
     }).catch(() => null);
 
-    if (res && !res.ok && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+    if (
+      res &&
+      !res.ok &&
+      isGuestSession &&
+      isGuestSessionExpiredStatus(res.status)
+    ) {
       redirect(GUEST_EXPIRED_REDIRECT_PATH);
     }
 

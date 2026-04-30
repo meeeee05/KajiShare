@@ -3,46 +3,14 @@
 import { signOut } from "next-auth/react";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
+  isGuestSessionExpiredMessage,
   isGuestSessionExpiredStatus,
   isGuestSessionUser,
 } from "@/lib/guest-session";
 
-const PRESERVE_LOCAL_STORAGE_KEYS = new Set(["theme"]);
-
-const removeGuestLikeKeys = (storage: Storage) => {
-  const targets: string[] = [];
-
-  for (let i = 0; i < storage.length; i += 1) {
-    const key = storage.key(i);
-    if (!key) {
-      continue;
-    }
-
-    if (PRESERVE_LOCAL_STORAGE_KEYS.has(key)) {
-      continue;
-    }
-
-    const lowered = key.toLowerCase();
-    if (
-      lowered.includes("guest") ||
-      lowered.includes("token") ||
-      lowered.includes("user") ||
-      lowered.includes("group") ||
-      lowered.includes("assignment-status") ||
-      lowered.includes("nextauth")
-    ) {
-      targets.push(key);
-    }
-  }
-
-  for (const key of targets) {
-    storage.removeItem(key);
-  }
-};
-
 export const clearGuestLocalData = () => {
   try {
-    removeGuestLikeKeys(window.localStorage);
+    window.localStorage.clear();
   } catch {
     // ignore storage errors
   }
@@ -70,6 +38,18 @@ export const handleGuestSessionExpiryResponse = async (params: {
   }
 
   if (!isGuestSessionExpiredStatus(response.status)) {
+    return false;
+  }
+
+  const payload = await response
+    .clone()
+    .json()
+    .catch(async () => {
+      const text = await response.clone().text().catch(() => "");
+      return text || null;
+    });
+
+  if (!isGuestSessionExpiredMessage(payload)) {
     return false;
   }
 

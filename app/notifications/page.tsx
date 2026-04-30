@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  GUEST_EXPIRED_MESSAGE,
-  isGuestSessionExpiredStatus,
-} from "@/lib/guest-session";
+import { GUEST_EXPIRED_MESSAGE } from "@/lib/guest-session";
 import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type NotificationType = "member_joined" | "task_assigned" | "task_evaluated";
@@ -92,23 +89,24 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
     });
 };
 
-const typeMeta: Record<NotificationType, { label: string; className: string }> = {
-  member_joined: {
-    label: "参加",
-    className:
-      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
-  },
-  task_assigned: {
-    label: "割当",
-    className:
-      "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-300",
-  },
-  task_evaluated: {
-    label: "評価",
-    className:
-      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
-  },
-};
+const typeMeta: Record<NotificationType, { label: string; className: string }> =
+  {
+    member_joined: {
+      label: "参加",
+      className:
+        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
+    },
+    task_assigned: {
+      label: "割当",
+      className:
+        "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-300",
+    },
+    task_evaluated: {
+      label: "評価",
+      className:
+        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
+    },
+  };
 
 const getTypeMeta = (type: string) => {
   if (type in typeMeta) {
@@ -168,13 +166,6 @@ export default function NotificationsPage() {
       }
 
       if (!response.ok) {
-        if (
-          session?.user &&
-          isGuestSessionExpiredStatus(response.status)
-        ) {
-          setError(GUEST_EXPIRED_MESSAGE);
-          return;
-        }
         throw new Error("notify fetch failed");
       }
 
