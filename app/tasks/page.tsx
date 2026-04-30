@@ -13,6 +13,7 @@ type GroupItem = {
 
 type TaskItem = {
   id?: string;
+  sourceTaskId?: string;
   name: string;
   point?: string;
   description?: string;
@@ -272,6 +273,7 @@ const recurringTaskToTask = (
 
   return {
     id: `recurring:${stableId}`,
+    sourceTaskId: recurringTask.id,
     name: recurringTask.name,
     point: recurringTask.point,
     description: recurringTask.description,
@@ -489,13 +491,20 @@ export default async function TasksPage() {
             ) : (
               <div className="overflow-x-auto rounded-md border">
                 <table className="min-w-[640px] w-full border-collapse text-sm">
-                  <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                  <thead className="bg-slate-50 text-left text-xs dark:bg-slate-900">
                     <tr>
-                      <th className="px-3 py-2 font-semibold">家事の名前</th>
-                      <th className="px-3 py-2 font-semibold">
+                      <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">
+                        家事の名前
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">
                         負担ポイント（1〜5）
                       </th>
-                      <th className="px-3 py-2 font-semibold">備考</th>
+                      <th className="px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">
+                        備考
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200">
+                        操作
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -513,7 +522,16 @@ export default async function TasksPage() {
                         </td>
                         <td className="px-3 py-2 text-right">
                           {task.isRecurring ? (
-                            <span className="text-xs text-slate-400">-</span>
+                            task.sourceTaskId ? (
+                              <TaskDeleteButton
+                                taskId={task.sourceTaskId}
+                                groupId={group.id}
+                                apiUrl={apiUrl}
+                                resourceType="recurring"
+                              />
+                            ) : (
+                              <span className="text-xs text-slate-400">-</span>
+                            )
                           ) : (
                             <TaskDeleteButton
                               taskId={task.id}

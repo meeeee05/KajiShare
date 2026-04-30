@@ -35,7 +35,6 @@ type FormValues = {
   starts_on: string;
   day_of_week: string;
   interval_days: string;
-  active: boolean;
 };
 
 type FormErrors = Partial<Record<keyof FormValues | "base", string>>;
@@ -48,7 +47,6 @@ const defaultFormValues = (): FormValues => ({
   starts_on: "",
   day_of_week: "1",
   interval_days: "",
-  active: true,
 });
 
 const dayOptions = [
@@ -248,7 +246,7 @@ const buildPayload = (values: FormValues) => {
     point,
     schedule_type: "weekly",
     starts_on: values.starts_on,
-    active: values.active,
+    active: true,
     day_of_week: Number(values.day_of_week),
   };
 
@@ -260,9 +258,9 @@ const validateValues = (values: FormValues): FormErrors => {
 
   const trimmedName = values.name.trim();
   if (!trimmedName) {
-    errors.name = "名前は必須です。";
+    errors.name = "家事の名前は必須です。";
   } else if (trimmedName.length > 50) {
-    errors.name = "名前は50文字以内で入力してください。";
+    errors.name = "家事の名前は50文字以内で入力してください。";
   }
 
   const point = Number(values.point);
@@ -290,7 +288,6 @@ const recurringTaskToFormValues = (task: RecurringTask): FormValues => ({
   starts_on: task.starts_on,
   day_of_week: String(task.day_of_week ?? 1),
   interval_days: "",
-  active: task.active,
 });
 
 export default function RecurringTaskManager({
@@ -604,10 +601,9 @@ export default function RecurringTaskManager({
           <table className="min-w-[640px] w-full border-collapse text-xs sm:text-sm">
             <thead className="bg-slate-50 text-left text-slate-600 dark:bg-slate-900 dark:text-slate-300">
               <tr>
-                <th className="px-2 py-2 font-semibold">名前</th>
+                <th className="px-2 py-2 font-semibold">家事の名前</th>
                 <th className="px-2 py-2 font-semibold">周期</th>
                 <th className="px-2 py-2 font-semibold">開始日</th>
-                <th className="px-2 py-2 font-semibold">有効</th>
                 <th className="px-2 py-2 font-semibold">操作</th>
               </tr>
             </thead>
@@ -619,14 +615,13 @@ export default function RecurringTaskManager({
                     {scheduleTypeLabel(row.schedule_type)}
                   </td>
                   <td className="px-2 py-2">{row.starts_on}</td>
-                  <td className="px-2 py-2">{row.active ? "ON" : "OFF"}</td>
                   <td className="px-2 py-2">
                     {canManage ? (
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => startEdit(row.id)}
-                          className="text-blue-600 hover:underline disabled:opacity-60"
+                          className="rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={isPending}
                         >
                           編集
@@ -634,7 +629,7 @@ export default function RecurringTaskManager({
                         <button
                           type="button"
                           onClick={() => onDelete(row.id)}
-                          className="text-red-600 hover:underline disabled:opacity-60"
+                          className="rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                           disabled={isPending}
                         >
                           削除
@@ -655,7 +650,7 @@ export default function RecurringTaskManager({
         <form onSubmit={onSubmit} className="space-y-3 rounded-md border p-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="text-xs sm:text-sm">
-              <span className="mb-1 block font-semibold">名前</span>
+              <span className="mb-1 block font-semibold">家事の名前</span>
               <input
                 value={formValues.name}
                 onChange={(e) =>
@@ -751,22 +746,6 @@ export default function RecurringTaskManager({
               <p className="text-xs text-red-600">{formErrors.schedule_type}</p>
             ) : null}
 
-            {editingId ? (
-              <label className="flex items-center gap-2 text-xs sm:text-sm">
-                <input
-                  type="checkbox"
-                  checked={formValues.active}
-                  onChange={(e) =>
-                    setFormValues((prev) => ({
-                      ...prev,
-                      active: e.target.checked,
-                    }))
-                  }
-                  disabled={isPending}
-                />
-                <span className="font-semibold">有効（active）</span>
-              </label>
-            ) : null}
           </div>
 
           <label className="text-xs sm:text-sm">

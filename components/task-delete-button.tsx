@@ -9,6 +9,7 @@ type Props = {
   groupId?: string;
   apiUrl?: string;
   textOnly?: boolean;
+  resourceType?: "task" | "recurring";
 };
 
 export default function TaskDeleteButton({
@@ -16,6 +17,7 @@ export default function TaskDeleteButton({
   groupId,
   apiUrl,
   textOnly,
+  resourceType = "task",
 }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -28,7 +30,8 @@ export default function TaskDeleteButton({
       return;
     }
 
-    const ok = window.confirm("このタスクを削除しますか？");
+    const label = resourceType === "recurring" ? "周期タスク" : "タスク";
+    const ok = window.confirm(`この${label}を削除しますか？`);
     if (!ok) {
       return;
     }
@@ -46,9 +49,13 @@ export default function TaskDeleteButton({
         return;
       }
 
-      const endpoints = [`${v1Base}/tasks/${encodeURIComponent(taskId)}`];
+      const resourcePath =
+        resourceType === "recurring" ? "recurring_tasks" : "tasks";
+      const endpoints = [
+        `${v1Base}/${resourcePath}/${encodeURIComponent(taskId)}`,
+      ];
 
-      let lastError = "タスク削除に失敗しました。";
+      let lastError = `${label}削除に失敗しました。`;
 
       for (const endpoint of endpoints) {
         const res = await fetch(endpoint, {
@@ -72,7 +79,7 @@ export default function TaskDeleteButton({
         lastError =
           (data as { error?: string; message?: string } | null)?.error ??
           (data as { error?: string; message?: string } | null)?.message ??
-          `タスク削除に失敗しました。(status: ${res.status})`;
+          `${label}削除に失敗しました。(status: ${res.status})`;
       }
 
       setError(lastError);
