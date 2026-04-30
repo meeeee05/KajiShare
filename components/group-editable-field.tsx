@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Pencil } from "lucide-react";
 import Link from "next/link";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type EditableField = "name" | "assign_mode" | "balance_type";
 
@@ -190,6 +191,16 @@ export default function GroupEditableField({
 
         if (!res) {
           continue;
+        }
+
+        if (
+          await handleGuestSessionExpiryResponse({
+            response: res,
+            sessionUser: session?.user,
+            onRedirect: (path) => router.replace(path),
+          })
+        ) {
+          return;
         }
 
         if (res.ok) {

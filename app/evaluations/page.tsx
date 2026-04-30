@@ -2,6 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import AssignmentEvaluationForm from "@/components/assignment-evaluation-form";
+import {
+  GUEST_EXPIRED_REDIRECT_PATH,
+  isGuestSessionExpiredStatus,
+  isGuestSessionUser,
+} from "@/lib/guest-session";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -700,6 +705,7 @@ export default async function EvaluationsPage() {
 
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
+  const isGuestSession = isGuestSessionUser(session.user);
 
   if (!apiUrl || !idToken) {
     throw new Error(
@@ -719,6 +725,10 @@ export default async function EvaluationsPage() {
     }).catch(() => null);
 
     if (!res?.ok) {
+      if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+        redirect(GUEST_EXPIRED_REDIRECT_PATH);
+      }
+
       return null;
     }
 

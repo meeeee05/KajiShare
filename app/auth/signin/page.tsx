@@ -3,8 +3,23 @@
 import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { GUEST_EXPIRED_MESSAGE } from "@/lib/guest-session";
+import { clearGuestLocalData } from "@/lib/guest-session-client";
 
 export default function SignInPage() {
+  const searchParams = useSearchParams();
+  const guestExpired = searchParams.get("guestExpired") === "1";
+
+  useEffect(() => {
+    if (!guestExpired) {
+      return;
+    }
+
+    clearGuestLocalData();
+  }, [guestExpired]);
+
   return (
     <div className="flex min-h-[calc(100dvh-6rem)] items-center justify-center px-3 py-4 sm:min-h-[60vh] sm:px-4 sm:py-6">
       <div className="w-full max-w-[390px] space-y-5 rounded-2xl border bg-background p-5 shadow-sm sm:space-y-6 sm:p-8">
@@ -18,6 +33,11 @@ export default function SignInPage() {
             priority
           />
           <div>
+            {guestExpired ? (
+              <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {GUEST_EXPIRED_MESSAGE}
+              </p>
+            ) : null}
             <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
               Googleアカウントからサインインできます
             </p>

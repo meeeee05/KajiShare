@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   apiUrl?: string;
@@ -142,6 +143,16 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
           continue;
         }
 
+        if (
+          await handleGuestSessionExpiryResponse({
+            response: res,
+            sessionUser: session?.user,
+            onRedirect: (path) => router.replace(path),
+          })
+        ) {
+          return;
+        }
+
         const data = await res.json().catch(() => null);
 
         if (res.ok) {
@@ -208,6 +219,16 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
 
         if (!res) {
           continue;
+        }
+
+        if (
+          await handleGuestSessionExpiryResponse({
+            response: res,
+            sessionUser: session?.user,
+            onRedirect: (path) => router.replace(path),
+          })
+        ) {
+          return;
         }
 
         const data = await res.json().catch(() => null);

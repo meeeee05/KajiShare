@@ -2,6 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import RecurringTaskManager from "@/components/recurring-task-panel";
+import {
+  GUEST_EXPIRED_REDIRECT_PATH,
+  isGuestSessionExpiredStatus,
+  isGuestSessionUser,
+} from "@/lib/guest-session";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -145,6 +150,7 @@ export default async function RecurringTasksPage({
 
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
+  const isGuestSession = isGuestSessionUser(session.user);
   const currentUserId = (session.user as { id?: string } | undefined)?.id;
   const currentUserEmail = session.user?.email ?? undefined;
 
@@ -167,6 +173,10 @@ export default async function RecurringTasksPage({
     }).catch(() => null);
 
     if (!res?.ok) {
+      if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+        redirect(GUEST_EXPIRED_REDIRECT_PATH);
+      }
+
       return null;
     }
 

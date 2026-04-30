@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   apiUrl?: string;
@@ -42,6 +43,18 @@ export default function AccountDeleteButton({ apiUrl }: Props) {
           Authorization: `Bearer ${token}`,
         },
       }).catch(() => null);
+
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: res,
+          sessionUser: session?.user,
+          onRedirect: (path) => {
+            window.location.replace(path);
+          },
+        })
+      ) {
+        return { ok: false, error: undefined };
+      }
 
       if (!res) {
         continue;

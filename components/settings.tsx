@@ -45,12 +45,13 @@ export default function UserButton() {
       >
         <Sun className="w-6 h-6 text-slate-500" aria-label="ダークモード切替" />
       </button>
-      <button
-        type="button"
+      <Link
+        href="/notifications"
         className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-1"
+        aria-label="通知"
       >
         <Bell className="w-6 h-6 text-slate-500" aria-label="通知" />
-      </button>
+      </Link>
       {session ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -1,7 +1,16 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   groupId?: string;
@@ -295,6 +304,7 @@ export default function RecurringTaskManager({
   apiUrl,
   canManage,
 }: Props) {
+  const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [rows, setRows] = useState<RecurringTask[]>([]);
@@ -314,7 +324,7 @@ export default function RecurringTaskManager({
     return base.endsWith("/api/v1") ? base : `${base}/api/v1`;
   }, [base]);
 
-  const loadRows = () => {
+  const loadRows = useCallback(() => {
     if (!groupId || !v1Base || !token) {
       return;
     }
@@ -329,6 +339,16 @@ export default function RecurringTaskManager({
       cache: "no-store",
     })
       .then(async (res) => {
+        if (
+          await handleGuestSessionExpiryResponse({
+            response: res,
+            sessionUser: session?.user,
+            onRedirect: (path) => router.replace(path),
+          })
+        ) {
+          return;
+        }
+
         if (!res.ok) {
           const data = await res.json().catch(() => null);
           const message =
@@ -350,11 +370,11 @@ export default function RecurringTaskManager({
       .finally(() => {
         setLoading(false);
       });
-  };
+  }, [groupId, router, session?.user, token, v1Base]);
 
   useEffect(() => {
     loadRows();
-  }, [groupId, v1Base, token]);
+  }, [loadRows]);
 
   const startCreate = () => {
     setEditingId(null);
@@ -386,6 +406,16 @@ export default function RecurringTaskManager({
 
       if (!res) {
         setNotice("周期タスク詳細の取得に失敗しました。");
+        return;
+      }
+
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: res,
+          sessionUser: session?.user,
+          onRedirect: (path) => router.replace(path),
+        })
+      ) {
         return;
       }
 
@@ -448,6 +478,16 @@ export default function RecurringTaskManager({
 
       if (!res) {
         setNotice("周期タスクの保存に失敗しました。");
+        return;
+      }
+
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: res,
+          sessionUser: session?.user,
+          onRedirect: (path) => router.replace(path),
+        })
+      ) {
         return;
       }
 
@@ -518,6 +558,16 @@ export default function RecurringTaskManager({
 
       if (!res) {
         setNotice("周期タスク削除に失敗しました。");
+        return;
+      }
+
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: res,
+          sessionUser: session?.user,
+          onRedirect: (path) => router.replace(path),
+        })
+      ) {
         return;
       }
 

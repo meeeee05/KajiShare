@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   assignmentId?: string;
@@ -14,6 +16,7 @@ export default function AssignmentEvaluationForm({
   taskId,
   apiUrl,
 }: Props) {
+  const router = useRouter();
   const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [score, setScore] = useState("3");
@@ -74,6 +77,16 @@ export default function AssignmentEvaluationForm({
 
       if (!res) {
         setError("評価の登録に失敗しました。ネットワークをご確認ください。");
+        return;
+      }
+
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: res,
+          sessionUser: session?.user,
+          onRedirect: (path) => router.replace(path),
+        })
+      ) {
         return;
       }
 

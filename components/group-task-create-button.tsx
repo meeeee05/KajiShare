@@ -3,6 +3,7 @@
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   groupId?: string;
@@ -72,6 +73,16 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
 
       if (!res) {
         setError("タスク作成に失敗しました。");
+        return;
+      }
+
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: res,
+          sessionUser: session?.user,
+          onRedirect: (path) => router.replace(path),
+        })
+      ) {
         return;
       }
 

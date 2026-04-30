@@ -57,6 +57,7 @@ export const config: NextAuthConfig = {
       if (account?.provider === "guest") {
         token.idToken = "guest-demo-token";
         token.isGuest = true;
+        token.account_type = "guest";
         return token;
       }
 
@@ -102,6 +103,12 @@ export const config: NextAuthConfig = {
     session({ session, token }) {
       session.user.idToken = token.idToken;
       session.user.isGuest = token.isGuest === true;
+      session.user.account_type =
+        typeof token.account_type === "string"
+          ? token.account_type
+          : token.isGuest === true
+            ? "guest"
+            : undefined;
 
       return session;
     },
@@ -113,6 +120,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     idToken?: string;
     isGuest?: boolean;
+    account_type?: string;
   }
 }
 
@@ -122,6 +130,7 @@ declare module "next-auth" {
     user: {
       idToken?: string;
       isGuest?: boolean;
+      account_type?: string;
     } & DefaultSession["user"];
   }
 }

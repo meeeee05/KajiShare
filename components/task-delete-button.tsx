@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   taskId?: string;
@@ -68,6 +69,16 @@ export default function TaskDeleteButton({
 
         if (!res) {
           continue;
+        }
+
+        if (
+          await handleGuestSessionExpiryResponse({
+            response: res,
+            sessionUser: session?.user,
+            onRedirect: (path) => router.replace(path),
+          })
+        ) {
+          return;
         }
 
         if (res.ok) {

@@ -3,6 +3,11 @@ import { auth } from "@/auth";
 import Link from "next/link";
 import GroupLeaveLink from "@/components/group-leave-link";
 import GroupEditableField from "../../components/group-editable-field";
+import {
+  GUEST_EXPIRED_REDIRECT_PATH,
+  isGuestSessionExpiredStatus,
+  isGuestSessionUser,
+} from "@/lib/guest-session";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -253,6 +258,7 @@ const enrichFallbackNames = async (
   groups: GroupListItem[],
   apiUrl: string,
   idToken: string,
+  isGuestSession: boolean,
 ): Promise<GroupListItem[]> => {
   return Promise.all(
     groups.map(async (group) => {
@@ -269,6 +275,10 @@ const enrichFallbackNames = async (
       }).catch(() => null);
 
       if (!res?.ok) {
+        if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+          redirect(GUEST_EXPIRED_REDIRECT_PATH);
+        }
+
         return group;
       }
 
@@ -300,6 +310,7 @@ export default async function GroupsPage() {
 
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as any)?.idToken as string | undefined;
+  const isGuestSession = isGuestSessionUser(session.user);
 
   if (!apiUrl || !idToken) {
     throw new Error(
@@ -326,6 +337,10 @@ export default async function GroupsPage() {
       }).catch(() => null);
 
       if (!res?.ok) {
+        if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+          redirect(GUEST_EXPIRED_REDIRECT_PATH);
+        }
+
         continue;
       }
 
@@ -457,7 +472,12 @@ export default async function GroupsPage() {
 
   let groupList = Array.from(mergedMap.values());
 
-  groupList = await enrichFallbackNames(groupList, apiUrl, idToken);
+  groupList = await enrichFallbackNames(
+    groupList,
+    apiUrl,
+    idToken,
+    isGuestSession,
+  );
 
   groupList = groupList
     .map((group, index) => ({ group, index }))

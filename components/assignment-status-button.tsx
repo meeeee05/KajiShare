@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import TaskDeleteButton from "@/components/task-delete-button";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   assignmentId?: string;
@@ -371,6 +372,16 @@ export default function AssignmentStatusButton({
             cache: "no-store",
           }).catch(() => null);
 
+          if (
+            await handleGuestSessionExpiryResponse({
+              response: res,
+              sessionUser: session?.user,
+              onRedirect: (path) => router.replace(path),
+            })
+          ) {
+            return undefined;
+          }
+
           if (!res?.ok) {
             continue;
           }
@@ -465,6 +476,16 @@ export default function AssignmentStatusButton({
               body: JSON.stringify(payload),
             }).catch(() => null);
 
+            if (
+              await handleGuestSessionExpiryResponse({
+                response: createRes,
+                sessionUser: session?.user,
+                onRedirect: (path) => router.replace(path),
+              })
+            ) {
+              return;
+            }
+
             if (createRes?.status === 422) {
               const existingId = await findExistingAssignmentId(taskId);
               if (existingId) {
@@ -533,6 +554,16 @@ export default function AssignmentStatusButton({
             },
             body: JSON.stringify(buildAssignmentPayload(targetStatus)),
           }).catch(() => null);
+
+          if (
+            await handleGuestSessionExpiryResponse({
+              response: res,
+              sessionUser: session?.user,
+              onRedirect: (path) => router.replace(path),
+            })
+          ) {
+            return;
+          }
 
           if (!res) {
             continue;

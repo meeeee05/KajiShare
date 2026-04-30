@@ -2,6 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import AssignmentStatusButton from "@/components/assignment-status-button";
+import {
+  GUEST_EXPIRED_REDIRECT_PATH,
+  isGuestSessionExpiredStatus,
+  isGuestSessionUser,
+} from "@/lib/guest-session";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -1293,59 +1298,9 @@ export default async function RecordsPage() {
     redirect("/auth/timeout");
   }
 
-  const isGuest = (session.user as { isGuest?: boolean } | undefined)?.isGuest;
-
-  if (isGuest) {
-    return (
-      <div className="prose max-w-none p-4 sm:p-6">
-        <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
-          <h1 className="text-2xl font-extrabold">担当の家事</h1>
-        </div>
-
-        <p className="mt-6 text-sm text-slate-600 dark:text-slate-300">
-          今日のあなたの担当は 1 件です。
-        </p>
-
-        <div className="not-prose mt-8 space-y-6">
-          <section className="rounded-lg border bg-card p-4 sm:p-5">
-            <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-              <h2 className="text-lg font-bold">サンプルグループ</h2>
-            </div>
-
-            <div className="overflow-x-auto rounded-md border">
-              <table className="min-w-[720px] w-full border-collapse text-sm">
-                <thead className="bg-slate-50 text-left text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">家事の名前</th>
-                    <th className="px-3 py-2 font-semibold">負担ポイント</th>
-                    <th className="px-3 py-2 font-semibold">備考</th>
-                    <th className="px-3 py-2 font-semibold">進捗状況</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-t align-top">
-                    <td className="px-3 py-2 font-medium">サンプル: 食器洗い</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">2</td>
-                    <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                      毎日夜に実施する想定です。
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200">
-                        着手前
-                      </span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      </div>
-    );
-  }
-
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
+  const isGuestSession = isGuestSessionUser(session.user);
 
   if (!apiUrl || !idToken) {
     throw new Error(
@@ -1365,6 +1320,10 @@ export default async function RecordsPage() {
     }).catch(() => null);
 
     if (!res?.ok) {
+      if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+        redirect(GUEST_EXPIRED_REDIRECT_PATH);
+      }
+
       return null;
     }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   groupId?: string;
@@ -59,6 +60,17 @@ export default function GroupLeaveLink({
         cache: "no-store",
       }).catch(() => null);
 
+      if (
+        await handleGuestSessionExpiryResponse({
+          response: groupsRes,
+          sessionUser: session?.user,
+          onRedirect: (path) => router.replace(path),
+        })
+      ) {
+        setIsLeaving(false);
+        return;
+      }
+
       const groupsPayload = await groupsRes?.json().catch(() => null);
       const groups = Array.isArray((groupsPayload as any)?.data)
         ? (groupsPayload as any).data
@@ -91,6 +103,17 @@ export default function GroupLeaveLink({
         },
       },
     ).catch(() => null);
+
+    if (
+      await handleGuestSessionExpiryResponse({
+        response: res,
+        sessionUser: session?.user,
+        onRedirect: (path) => router.replace(path),
+      })
+    ) {
+      setIsLeaving(false);
+      return;
+    }
 
     if (!res?.ok) {
       const data = await res?.json().catch(() => null);
