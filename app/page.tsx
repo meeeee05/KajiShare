@@ -837,8 +837,10 @@ const normalizeRecurringTask = (
   const recurring = unwrapEntity(recurringRoot);
 
   const scheduleTypeRaw =
-    pickFromSources(recurring, recurringRoot, ["schedule_type", "scheduleType"])
-    ?? "";
+    pickFromSources(recurring, recurringRoot, [
+      "schedule_type",
+      "scheduleType",
+    ]) ?? "";
   const scheduleTypeNormalized = normalizeText(scheduleTypeRaw);
 
   const scheduleType: RecurringTaskItem["scheduleType"] =
@@ -852,7 +854,8 @@ const normalizeRecurringTask = (
         : "";
 
   const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
-  const active = activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
+  const active =
+    activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
 
   return {
     id:
@@ -861,19 +864,29 @@ const normalizeRecurringTask = (
     name:
       pickFromSources(recurring, recurringRoot, ["name", "title"]) ??
       `周期タスク ${index + 1}`,
-    point: pickFromSources(recurring, recurringRoot, ["point", "score", "value"]),
+    point: pickFromSources(recurring, recurringRoot, [
+      "point",
+      "score",
+      "value",
+    ]),
     description: pickFromSources(recurring, recurringRoot, [
       "description",
       "detail",
       "memo",
     ]),
     scheduleType,
-    dayOfWeek: pickFromSources(recurring, recurringRoot, ["day_of_week", "dayOfWeek"]),
+    dayOfWeek: pickFromSources(recurring, recurringRoot, [
+      "day_of_week",
+      "dayOfWeek",
+    ]),
     intervalDays: pickFromSources(recurring, recurringRoot, [
       "interval_days",
       "intervalDays",
     ]),
-    startsOn: pickFromSources(recurring, recurringRoot, ["starts_on", "startsOn"]),
+    startsOn: pickFromSources(recurring, recurringRoot, [
+      "starts_on",
+      "startsOn",
+    ]),
     active,
     sourceIndex: index,
   };
@@ -917,25 +930,25 @@ const parseRecurringDayOfWeek = (value?: string) => {
   const map: Record<string, number> = {
     sun: 0,
     sunday: 0,
-    "日": 0,
+    日: 0,
     mon: 1,
     monday: 1,
-    "月": 1,
+    月: 1,
     tue: 2,
     tuesday: 2,
-    "火": 2,
+    火: 2,
     wed: 3,
     wednesday: 3,
-    "水": 3,
+    水: 3,
     thu: 4,
     thursday: 4,
-    "木": 4,
+    木: 4,
     fri: 5,
     friday: 5,
-    "金": 5,
+    金: 5,
     sat: 6,
     saturday: 6,
-    "土": 6,
+    土: 6,
   };
 
   return map[normalized];
@@ -2241,7 +2254,9 @@ export default async function Home() {
           : undefined;
 
         const myAssignment = myAssignmentFromNormalized ?? myAssignmentFromRows;
-        const isAssignedByFallback = assignedTaskKeys.has(taskAssignmentKey(task));
+        const isAssignedByFallback = assignedTaskKeys.has(
+          taskAssignmentKey(task),
+        );
 
         return {
           group,
@@ -2256,7 +2271,11 @@ export default async function Home() {
                 : "着手前"
             : isAssignedByFallback
               ? "着手前"
-              : getMyTaskStatus(task, myMembershipIdInGroup, assignmentsByTaskId),
+              : getMyTaskStatus(
+                  task,
+                  myMembershipIdInGroup,
+                  assignmentsByTaskId,
+                ),
         };
       });
 
@@ -2299,7 +2318,7 @@ export default async function Home() {
       );
       return bTime - aTime;
     })
-    .slice(0, 8);
+    .slice(0, 5);
 
   const taskGroupByTaskId = new Map<
     string,
@@ -2515,7 +2534,7 @@ export default async function Home() {
 
   const recentGroups = [...groups]
     .sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt))
-    .slice(0, 4)
+    .slice(0, 5)
     .map((group) => ({
       group,
       members: uniqueMembers(

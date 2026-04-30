@@ -546,25 +546,25 @@ const parseRecurringDayOfWeek = (value?: string) => {
   const map: Record<string, number> = {
     sun: 0,
     sunday: 0,
-    "日": 0,
+    日: 0,
     mon: 1,
     monday: 1,
-    "月": 1,
+    月: 1,
     tue: 2,
     tuesday: 2,
-    "火": 2,
+    火: 2,
     wed: 3,
     wednesday: 3,
-    "水": 3,
+    水: 3,
     thu: 4,
     thursday: 4,
-    "木": 4,
+    木: 4,
     fri: 5,
     friday: 5,
-    "金": 5,
+    金: 5,
     sat: 6,
     saturday: 6,
-    "土": 6,
+    土: 6,
   };
 
   return map[normalized];
@@ -1685,9 +1685,13 @@ export default async function RecordsPage() {
                         </td>
                         <td className="px-3 py-2">
                           {task.isRecurring ? (
-                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-200">
-                              周期タスク（割り当て）
-                            </span>
+                            <AssignmentStatusButton
+                              taskId={task.id}
+                              groupId={group.id}
+                              currentStatus={task.assignmentStatus}
+                              apiUrl={apiUrl}
+                              localOnly
+                            />
                           ) : (
                             <AssignmentStatusButton
                               assignmentId={task.assignmentId}

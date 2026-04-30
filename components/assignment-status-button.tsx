@@ -12,6 +12,7 @@ type Props = {
   currentStatus?: string;
   apiUrl?: string;
   showDeleteWhenCompleted?: boolean;
+  localOnly?: boolean;
 };
 
 type AssignmentRow = {
@@ -283,6 +284,7 @@ export default function AssignmentStatusButton({
   currentStatus,
   apiUrl,
   showDeleteWhenCompleted,
+  localOnly,
 }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -324,6 +326,16 @@ export default function AssignmentStatusButton({
 
     startTransition(async () => {
       setError(null);
+
+      if (localOnly) {
+        setLocalStatus(targetStatus);
+        try {
+          window.localStorage.setItem(statusStorageKey, targetStatus);
+        } catch {
+          // ignore localStorage access errors
+        }
+        return;
+      }
 
       const token = (session?.user as { idToken?: string } | undefined)
         ?.idToken;
