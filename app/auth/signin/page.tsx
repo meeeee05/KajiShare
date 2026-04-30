@@ -40,6 +40,12 @@ export default function SignInPage() {
         <button
           type="button"
           className="w-full text-center text-sm text-blue-600 hover:underline"
+          onClick={() =>
+            signIn("guest", {
+              mode: "guest",
+              callbackUrl: "/",
+            })
+          }
         >
           ゲストログイン
         </button>

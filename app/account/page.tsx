@@ -10,6 +10,7 @@ export default async function AccountPage() {
   }
 
   const user = session.user;
+  const isGuest = (session.user as { isGuest?: boolean } | undefined)?.isGuest;
   const apiUrl = process.env.API_URL;
 
   return (
@@ -28,14 +29,16 @@ export default async function AccountPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
-          <span className="font-semibold text-slate-600 dark:text-slate-300">
-            メール
-          </span>
-          <span className="font-medium break-all">
-            {user?.email || "未設定"}
-          </span>
-        </div>
+        {!isGuest ? (
+          <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
+            <span className="font-semibold text-slate-600 dark:text-slate-300">
+              メール
+            </span>
+            <span className="font-medium break-all">
+              {user?.email || "未設定"}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       <AccountDeleteButton apiUrl={apiUrl} />

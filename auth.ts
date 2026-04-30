@@ -2,6 +2,7 @@ import { request } from "http";
 import NextAuth, { NextAuthConfig, DefaultSession } from "next-auth";
 import Google from "next-auth/providers/google";
 import GoogleProvider from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import "next-auth/jwt";
 
 export const config: NextAuthConfig = {
@@ -9,6 +10,24 @@ export const config: NextAuthConfig = {
     logo: "https://next-auth.js.org/img/logo/logo-sm.png",
   },
   providers: [
+    Credentials({
+      id: "guest",
+      name: "Guest",
+      credentials: {
+        mode: { label: "mode", type: "text" },
+      },
+      authorize: async (credentials) => {
+        if (credentials?.mode !== "guest") {
+          return null;
+        }
+
+        return {
+          id: "guest-user",
+          name: "ゲストユーザー",
+          email: "guest@kajishare.local",
+        };
+      },
+    }),
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -35,6 +54,12 @@ export const config: NextAuthConfig = {
     },
 
     async jwt({ token, account, trigger }) {
+      if (account?.provider === "guest") {
+        token.idToken = "guest-demo-token";
+        token.isGuest = true;
+        return token;
+      }
+
       const idToken = account?.id_token;
 
       if (idToken === undefined) {
@@ -76,6 +101,7 @@ export const config: NextAuthConfig = {
     },
     session({ session, token }) {
       session.user.idToken = token.idToken;
+      session.user.isGuest = token.isGuest === true;
 
       return session;
     },
@@ -86,6 +112,7 @@ export const config: NextAuthConfig = {
 declare module "next-auth/jwt" {
   interface JWT {
     idToken?: string;
+    isGuest?: boolean;
   }
 }
 
@@ -94,6 +121,7 @@ declare module "next-auth" {
   interface Session {
     user: {
       idToken?: string;
+      isGuest?: boolean;
     } & DefaultSession["user"];
   }
 }

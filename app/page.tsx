@@ -1642,6 +1642,71 @@ export default async function Home() {
     redirect("/auth/timeout");
   }
 
+  const isGuest = (session.user as { isGuest?: boolean } | undefined)?.isGuest;
+
+  if (isGuest) {
+    return (
+      <div className="space-y-6 p-4 sm:space-y-8 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b pb-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">KajiShare</h1>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              こんにちは、ゲストユーザー さん
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              ゲストモード: サンプルデータで画面の動作確認ができます。
+            </p>
+          </div>
+        </div>
+
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-xs text-slate-500">自分の担当タスク</p>
+            <p className="mt-2 text-3xl font-bold">1</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-xs text-slate-500">完了</p>
+            <p className="mt-2 text-3xl font-bold text-emerald-600">0</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-xs text-slate-500">進行中</p>
+            <p className="mt-2 text-3xl font-bold text-blue-600">0</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-xs text-slate-500">着手前</p>
+            <p className="mt-2 text-3xl font-bold text-amber-600">1</p>
+          </div>
+        </section>
+
+        <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+          <section className="rounded-xl border bg-card p-4 sm:p-5">
+            <h2 className="mb-4 text-lg font-bold">最近登録したグループとメンバー</h2>
+            <div className="rounded-lg border p-3">
+              <p className="font-semibold">サンプルグループ</p>
+              <p className="mt-1 text-xs text-slate-500">メンバー 1 人</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs dark:bg-slate-800">
+                  ゲストユーザー
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-xl border bg-card p-4 sm:p-5">
+            <h2 className="mb-4 text-lg font-bold">最近自分に割り当てられたタスク</h2>
+            <div className="rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">サンプル: 食器洗い</p>
+                <span className="text-xs text-slate-500">サンプルグループ</span>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">自分の進行: 着手前</p>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
 

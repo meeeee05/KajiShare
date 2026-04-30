@@ -1,6 +1,6 @@
 "use client";
 import { Button } from "./ui/button";
-import { Settings, Sun } from "lucide-react";
+import { Bell, Settings, Sun } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +16,12 @@ import Link from "next/link";
 export default function UserButton() {
   // クライアント側でセッション取得
   const { data: session, status } = useSession();
+  const isGuest = (session?.user as { isGuest?: boolean } | undefined)?.isGuest;
+  const secondaryLabel = (session?.user as any)?.account_type
+    ? (session?.user as any)?.account_type
+    : isGuest
+      ? ""
+      : session?.user?.email;
 
   return (
     <div className="flex gap-0 items-center">
@@ -38,6 +44,12 @@ export default function UserButton() {
         }}
       >
         <Sun className="w-6 h-6 text-slate-500" aria-label="ダークモード切替" />
+      </button>
+      <button
+        type="button"
+        className="p-1 rounded-full hover:bg-accent focus:outline-none focus:ring-2 focus:ring-blue-400 mr-1"
+      >
+        <Bell className="w-6 h-6 text-slate-500" aria-label="通知" />
       </button>
       {session ? (
         <DropdownMenu>
@@ -91,9 +103,11 @@ export default function UserButton() {
                 <p className="text-sm font-medium leading-none">
                   {session.user?.name}
                 </p>
-                <p className="text-xs leading-none text-muted-foreground">
-                  {(session.user as any)?.account_type ?? session.user?.email}
-                </p>
+                {secondaryLabel ? (
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {secondaryLabel}
+                  </p>
+                ) : null}
               </div>
             </DropdownMenuLabel>
             <SignOutMenuItem />
