@@ -1656,9 +1656,7 @@ export default async function RecordsPage() {
             </div>
 
             {assignedTasks.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                本日の担当家事はありません。
-              </p>
+              <p className="text-sm text-slate-500">本日の担当はありません。</p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
                 <table className="min-w-[720px] w-full border-collapse text-sm">
@@ -1699,7 +1697,6 @@ export default async function RecordsPage() {
                               groupId={group.id}
                               currentStatus={task.assignmentStatus}
                               apiUrl={apiUrl}
-                              showDeleteWhenCompleted
                             />
                           )}
                         </td>

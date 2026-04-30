@@ -584,7 +584,7 @@ export default function RecurringTaskManager({
 
       {!canManage ? (
         <p className="mb-2 text-xs text-slate-500">
-          新規作成は可能です。編集・削除は管理者のみ操作できます。
+          編集・削除は管理者のみ操作できます。
         </p>
       ) : null}
 
@@ -745,7 +745,6 @@ export default function RecurringTaskManager({
             {formErrors.schedule_type ? (
               <p className="text-xs text-red-600">{formErrors.schedule_type}</p>
             ) : null}
-
           </div>
 
           <label className="text-xs sm:text-sm">
