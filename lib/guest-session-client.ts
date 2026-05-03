@@ -45,7 +45,10 @@ export const handleGuestSessionExpiryResponse = async (params: {
     .clone()
     .json()
     .catch(async () => {
-      const text = await response.clone().text().catch(() => "");
+      const text = await response
+        .clone()
+        .text()
+        .catch(() => "");
       return text || null;
     });
 

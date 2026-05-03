@@ -42,10 +42,58 @@ const pickString = (record: Record<string, unknown> | null, key: string) => {
   return typeof value === "string" ? value : "";
 };
 
-const normalizeNotifications = (payload: unknown): NotificationItem[] => {
+const pickFirstString = (
+  record: Record<string, unknown> | null,
+  keys: string[],
+) => {
+  if (!record) {
+    return "";
+  }
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+
+    if (typeof value === "number") {
+      return String(value);
+    }
+  }
+
+  return "";
+};
+
+const extractNotifications = (payload: unknown): unknown[] => {
   const root = asRecord(payload);
-  const data = asRecord(root?.data);
-  const list = data?.notifications;
+  if (!root) {
+    return [];
+  }
+
+  const data = asRecord(root.data);
+  const dataData = asRecord(data?.data);
+
+  const candidates = [
+    data?.notifications,
+    data?.items,
+    root.notifications,
+    root.items,
+    root.data,
+    dataData?.notifications,
+    dataData?.items,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate;
+    }
+  }
+
+  return [];
+};
+
+const normalizeNotifications = (payload: unknown): NotificationItem[] => {
+  const list = extractNotifications(payload);
 
   if (!Array.isArray(list)) {
     return [];
@@ -59,10 +107,15 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
       }
 
       return {
-        type: pickString(row, "type"),
-        title: pickString(row, "title") || "タイトルなし",
-        message: pickString(row, "message") || "",
-        occurredAt: pickString(row, "occurred_at"),
+        type: pickFirstString(row, ["type"]),
+        title: pickFirstString(row, ["title", "name"]) || "タイトルなし",
+        message: pickFirstString(row, ["message", "body"]) || "",
+        occurredAt: pickFirstString(row, [
+          "occurred_at",
+          "occurredAt",
+          "created_at",
+          "createdAt",
+        ]),
         sourceIndex: index,
       };
     })
