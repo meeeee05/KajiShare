@@ -95,6 +95,19 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
       }
 
       const data = await res.json().catch(() => null);
+      const errors = (data as { errors?: Record<string, unknown> } | null)
+        ?.errors;
+      const nameErrors = Array.isArray(errors?.name)
+        ? errors?.name
+            .map((item) => (typeof item === "string" ? item : ""))
+            .filter(Boolean)
+        : [];
+
+      if (res.status === 422 && nameErrors.length > 0) {
+        setError(`家事の名前: ${nameErrors.join(" / ")}`);
+        return;
+      }
+
       const lastMessage =
         (data as { error?: string; message?: string } | null)?.error ??
         (data as { error?: string; message?: string } | null)?.message ??

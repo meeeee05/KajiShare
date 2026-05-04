@@ -13,6 +13,19 @@ const parseLimit = (rawLimit: string | null): number => {
   return Math.min(Math.floor(parsed), MAX_LIMIT);
 };
 
+const maskAuthorization = (value: string) => {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length <= 18) {
+    return "Bearer ***";
+  }
+
+  return `${trimmed.slice(0, 14)}...${trimmed.slice(-4)}`;
+};
+
 export async function GET(req: Request) {
   const session = await auth();
   const idToken = (session?.user as { idToken?: string } | undefined)?.idToken;
@@ -34,6 +47,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const limit = parseLimit(url.searchParams.get("limit"));
+  const debug = url.searchParams.get("debug") === "1";
 
   const base = apiUrl.replace(/\/+$/, "");
   const v1Base = base.endsWith("/api/v1") ? base : `${base}/api/v1`;
@@ -48,6 +62,30 @@ export async function GET(req: Request) {
     });
 
     const payload = await res.json().catch(() => null);
+
+    if (debug) {
+      return NextResponse.json(
+        {
+          debug: {
+            request: {
+              endpoint,
+              headers: {
+                Authorization: maskAuthorization(`Bearer ${idToken}`),
+              },
+            },
+            response: {
+              status: res.status,
+              ok: res.ok,
+              headers: {
+                "content-type": res.headers.get("content-type") ?? "",
+              },
+            },
+          },
+          data: payload,
+        },
+        { status: res.ok ? 200 : res.status || 502 },
+      );
+    }
 
     if (!res.ok) {
       return NextResponse.json(

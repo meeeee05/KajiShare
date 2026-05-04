@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "./ui/button";
 import { Bell, Settings, Sun } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,53 +30,47 @@ const getSeenFingerprintKey = (user: {
   return `notifications:lastSeenFingerprint:${stableId}`;
 };
 
+const parseOccurredAtMs = (raw: string): number => {
+  const direct = Date.parse(raw);
+  if (Number.isFinite(direct)) {
+    return direct;
+  }
+
+  const trimmed = raw.trim();
+  const match = trimmed.match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?(?:\s*(Z|[+-]\d{2}:?\d{2}))?$/,
+  );
+
+  if (!match) {
+    return Number.NaN;
+  }
+
+  const [, y, m, d, hh, mm, ssRaw, msRaw, tzRaw] = match;
+  const ss = ssRaw ?? "00";
+  const ms = msRaw ? msRaw.slice(0, 3).padEnd(3, "0") : "000";
+
+  if (tzRaw) {
+    const tz = tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+    return Date.parse(`${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${tz}`);
+  }
+
+  return new Date(
+    Number(y),
+    Number(m) - 1,
+    Number(d),
+    Number(hh),
+    Number(mm),
+    Number(ss),
+    Number(ms),
+  ).getTime();
+};
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
 
   return value as Record<string, unknown>;
-};
-
-const extractNotifications = (payload: unknown): unknown[] => {
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const data = asRecord(root.data);
-  const dataData = asRecord(data?.data);
-
-  const candidates = [
-    data?.notifications,
-    data?.items,
-    root.notifications,
-    root.items,
-    root.data,
-    dataData?.notifications,
-    dataData?.items,
-  ];
-
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-  }
-
-  return [];
-};
-
-const pickTimestamp = (row: Record<string, unknown>): string | null => {
-  const keys = ["occurred_at", "occurredAt", "created_at", "createdAt"];
-
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-  }
-
-  return null;
 };
 
 const pickFirstString = (
@@ -97,11 +91,36 @@ const pickFirstString = (
   return "";
 };
 
+const extractNotifications = (payload: unknown): unknown[] => {
+  const root = asRecord(payload);
+  if (!root) {
+    return [];
+  }
+
+  const data = asRecord(root.data);
+  const list = data?.notifications;
+
+  return Array.isArray(list) ? list : [];
+};
+
+const pickTimestamp = (row: Record<string, unknown>): string | null => {
+  const keys = ["occurred_at", "occurredAt", "created_at", "createdAt"];
+
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
 const buildNotificationFingerprint = (
   row: Record<string, unknown>,
   occurredAt: string,
 ): string => {
-  const id = pickFirstString(row, ["id", "notification_id", "notificationId"]);
+  const id = pickFirstString(row, ["id"]);
   const type = pickFirstString(row, ["type"]);
   const title = pickFirstString(row, ["title"]);
   const message = pickFirstString(row, ["message"]);
@@ -134,7 +153,7 @@ const extractLatestNotificationMeta = (
 
     const fingerprint = buildNotificationFingerprint(item, occurredAt);
 
-    const time = Date.parse(occurredAt);
+    const time = parseOccurredAtMs(occurredAt);
     if (!Number.isFinite(time)) {
       continue;
     }
@@ -168,6 +187,7 @@ export default function UserButton() {
   const [latestFingerprint, setLatestFingerprint] = useState<string | null>(
     null,
   );
+  const requestSeqRef = useRef(0);
 
   const seenKey = useMemo(
     () =>
@@ -202,10 +222,14 @@ export default function UserButton() {
   }, [latestFingerprint, latestOccurredAt, seenFingerprintKey, seenKey]);
 
   const fetchLatestNotification = useCallback(async () => {
+    const seq = ++requestSeqRef.current;
+
     if (!session) {
-      setHasNewNotification(false);
-      setLatestOccurredAt(null);
-      setLatestFingerprint(null);
+      if (seq === requestSeqRef.current) {
+        setHasNewNotification(false);
+        setLatestOccurredAt(null);
+        setLatestFingerprint(null);
+      }
       return;
     }
 
@@ -223,6 +247,11 @@ export default function UserButton() {
     }
 
     const payload = (await res.json().catch(() => null)) as unknown;
+
+    if (seq !== requestSeqRef.current) {
+      return;
+    }
+
     const latest = extractLatestNotificationMeta(payload);
 
     if (!latest) {
@@ -243,18 +272,12 @@ export default function UserButton() {
     }
 
     if (!seen || !seenFingerprint) {
-      try {
-        window.localStorage.setItem(seenKey, latest.occurredAt);
-        window.localStorage.setItem(seenFingerprintKey, latest.fingerprint);
-      } catch {
-        // ignore localStorage errors
-      }
-      setHasNewNotification(false);
+      setHasNewNotification(true);
       return;
     }
 
-    const latestTime = Date.parse(latest.occurredAt);
-    const seenTime = Date.parse(seen);
+    const latestTime = parseOccurredAtMs(latest.occurredAt);
+    const seenTime = parseOccurredAtMs(seen);
     const isNewByTime = Number.isFinite(latestTime) && latestTime > seenTime;
     const isNewByFingerprint = latest.fingerprint !== seenFingerprint;
 

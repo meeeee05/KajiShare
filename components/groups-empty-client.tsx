@@ -249,6 +249,10 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
         return;
       }
 
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("kajishare:group-joined"));
+      }
+
       router.push("/");
     } catch (e) {
       setJoinError("グループ参加中にエラーが発生しました。");
