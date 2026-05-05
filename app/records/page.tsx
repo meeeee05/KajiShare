@@ -1698,6 +1698,7 @@ export default async function RecordsPage() {
                               groupId={group.id}
                               currentStatus={task.assignmentStatus}
                               apiUrl={apiUrl}
+                              showDeleteWhenCompleted
                               localOnly
                             />
                           ) : (
@@ -1707,6 +1708,7 @@ export default async function RecordsPage() {
                               groupId={group.id}
                               currentStatus={task.assignmentStatus}
                               apiUrl={apiUrl}
+                              showDeleteWhenCompleted
                             />
                           )}
                         </td>

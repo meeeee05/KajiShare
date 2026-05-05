@@ -16,6 +16,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 const POLLING_INTERVAL_MS = 30_000;
+const NOTIFICATIONS_LIMIT = 100;
 
 const getSeenKey = (user: { id?: string | null; email?: string | null }) => {
   const stableId = user.id ?? user.email ?? "anonymous";
@@ -50,7 +51,8 @@ const parseOccurredAtMs = (raw: string): number => {
   const ms = msRaw ? msRaw.slice(0, 3).padEnd(3, "0") : "000";
 
   if (tzRaw) {
-    const tz = tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+    const tz =
+      tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
     return Date.parse(`${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${tz}`);
   }
 
@@ -103,6 +105,51 @@ const extractNotifications = (payload: unknown): unknown[] => {
   return Array.isArray(list) ? list : [];
 };
 
+const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => {
+  const root = asRecord(row);
+  if (!root) {
+    return null;
+  }
+
+  const rootAttributes = asRecord(root.attributes);
+  if (rootAttributes) {
+    return {
+      ...root,
+      ...rootAttributes,
+    };
+  }
+
+  const notification = asRecord(root.notification);
+  const notificationAttributes = asRecord(notification?.attributes);
+  if (notificationAttributes) {
+    return {
+      ...notification,
+      ...notificationAttributes,
+      id:
+        notification.id ??
+        (typeof root.id === "string" || typeof root.id === "number"
+          ? root.id
+          : undefined),
+    };
+  }
+
+  const rowData = asRecord(root.data);
+  const rowDataAttributes = asRecord(rowData?.attributes);
+  if (rowDataAttributes) {
+    return {
+      ...rowData,
+      ...rowDataAttributes,
+      id:
+        rowData.id ??
+        (typeof root.id === "string" || typeof root.id === "number"
+          ? root.id
+          : undefined),
+    };
+  }
+
+  return notification ?? rowData ?? root;
+};
+
 const pickTimestamp = (row: Record<string, unknown>): string | null => {
   const keys = ["occurred_at", "occurredAt", "created_at", "createdAt"];
 
@@ -141,7 +188,7 @@ const extractLatestNotificationMeta = (
   let latestTime = Number.NEGATIVE_INFINITY;
 
   for (const row of notifications) {
-    const item = asRecord(row);
+    const item = unwrapNotificationRow(row);
     if (!item) {
       continue;
     }
@@ -172,6 +219,45 @@ const extractLatestNotificationMeta = (
   return latest;
 };
 
+const extractTaskAssignedEventId = (id: string): number | null => {
+  const match = id.match(/^task_assigned_(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const findMaxTaskAssignedEventIdInPayload = (payload: unknown): number | null => {
+  const notifications = extractNotifications(payload);
+  let max: number | null = null;
+
+  for (const row of notifications) {
+    const item = unwrapNotificationRow(row);
+    if (!item) {
+      continue;
+    }
+
+    const type = pickFirstString(item, ["type"]);
+    if (type !== "task_assigned") {
+      continue;
+    }
+
+    const id = pickFirstString(item, ["id"]);
+    const eventId = extractTaskAssignedEventId(id);
+    if (eventId == null) {
+      continue;
+    }
+
+    if (max == null || eventId > max) {
+      max = eventId;
+    }
+  }
+
+  return max;
+};
+
 export default function UserButton() {
   // クライアント側でセッション取得
   const { data: session, status } = useSession();
@@ -188,6 +274,8 @@ export default function UserButton() {
     null,
   );
   const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const sinceIdRef = useRef<number | null>(null);
 
   const seenKey = useMemo(
     () =>
@@ -223,6 +311,9 @@ export default function UserButton() {
 
   const fetchLatestNotification = useCallback(async () => {
     const seq = ++requestSeqRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     if (!session) {
       if (seq === requestSeqRef.current) {
@@ -233,9 +324,21 @@ export default function UserButton() {
       return;
     }
 
-    const res = await fetch("/api/notifications?limit=100", {
+    const params = new URLSearchParams({ limit: String(NOTIFICATIONS_LIMIT) });
+    if (sinceIdRef.current != null) {
+      params.set("since_id", String(sinceIdRef.current));
+    }
+
+    const res = await fetch(`/api/v1/notifications?${params.toString()}`, {
       cache: "no-store",
-    }).catch(() => null);
+      signal: controller.signal,
+    }).catch((error) => {
+      if ((error as { name?: string } | null)?.name === "AbortError") {
+        return null;
+      }
+
+      return null;
+    });
 
     if (!res?.ok) {
       const detail = await res?.json().catch(() => null);
@@ -247,6 +350,11 @@ export default function UserButton() {
     }
 
     const payload = (await res.json().catch(() => null)) as unknown;
+
+    const maxTaskAssignedEventId = findMaxTaskAssignedEventIdInPayload(payload);
+    if (maxTaskAssignedEventId != null) {
+      sinceIdRef.current = maxTaskAssignedEventId;
+    }
 
     if (seq !== requestSeqRef.current) {
       return;
@@ -291,10 +399,31 @@ export default function UserButton() {
       void fetchLatestNotification();
     }, POLLING_INTERVAL_MS);
 
+    const onTaskAssigned = () => {
+      void fetchLatestNotification();
+    };
+
+    const onFocus = () => {
+      void fetchLatestNotification();
+    };
+
+    window.addEventListener("kajishare:task-assigned", onTaskAssigned);
+    window.addEventListener("focus", onFocus);
+
     return () => {
+      abortRef.current?.abort();
       window.clearInterval(timer);
+      window.removeEventListener("kajishare:task-assigned", onTaskAssigned);
+      window.removeEventListener("focus", onFocus);
     };
   }, [fetchLatestNotification]);
+
+  useEffect(() => {
+    setHasNewNotification(false);
+    setLatestOccurredAt(null);
+    setLatestFingerprint(null);
+    sinceIdRef.current = null;
+  }, [seenKey, seenFingerprintKey]);
 
   useEffect(() => {
     if (pathname === "/notifications") {

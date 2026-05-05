@@ -13,6 +13,8 @@ type NotificationItem = {
   type: string;
   title: string;
   message: string;
+  assignmentId: string;
+  taskId: string;
   occurredAt: string;
 };
 
@@ -31,17 +33,7 @@ type DebugEnvelope = {
   data?: unknown;
 };
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
-
-const parseLimit = (rawLimit: string | null): number => {
-  const parsed = Number(rawLimit);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return DEFAULT_LIMIT;
-  }
-
-  return Math.min(Math.floor(parsed), MAX_LIMIT);
-};
+const NOTIFICATIONS_LIMIT = 100;
 
 const parseOccurredAtMs = (raw: string): number => {
   const direct = Date.parse(raw);
@@ -63,7 +55,8 @@ const parseOccurredAtMs = (raw: string): number => {
   const ms = msRaw ? msRaw.slice(0, 3).padEnd(3, "0") : "000";
 
   if (tzRaw) {
-    const tz = tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+    const tz =
+      tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
     return Date.parse(`${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${tz}`);
   }
 
@@ -106,13 +99,57 @@ const extractDataNotifications = (payload: unknown): unknown[] => {
   return Array.isArray(list) ? list : [];
 };
 
+const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => {
+  const root = asRecord(row);
+  if (!root) {
+    return null;
+  }
+
+  const rootAttributes = asRecord(root.attributes);
+  if (rootAttributes) {
+    return {
+      ...root,
+      ...rootAttributes,
+    };
+  }
+
+  const notification = asRecord(root.notification);
+  const notificationAttributes = asRecord(notification?.attributes);
+  if (notificationAttributes) {
+    return {
+      ...notification,
+      ...notificationAttributes,
+      id:
+        notification.id ??
+        (typeof root.id === "string" || typeof root.id === "number"
+          ? root.id
+          : undefined),
+    };
+  }
+
+  const rowData = asRecord(root.data);
+  const rowDataAttributes = asRecord(rowData?.attributes);
+  if (rowDataAttributes) {
+    return {
+      ...rowData,
+      ...rowDataAttributes,
+      id:
+        rowData.id ??
+        (typeof root.id === "string" || typeof root.id === "number"
+          ? root.id
+          : undefined),
+    };
+  }
+
+  return notification ?? rowData ?? root;
+};
+
 const normalizeNotifications = (payload: unknown): NotificationItem[] => {
   const rows = extractDataNotifications(payload);
   const deduped = new Map<string, NotificationItem>();
-  const withoutId: NotificationItem[] = [];
 
   for (const row of rows) {
-    const item = asRecord(row);
+    const item = unwrapNotificationRow(row);
     if (!item) {
       continue;
     }
@@ -128,28 +165,45 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
     const type = typeof item.type === "string" ? item.type : "";
     const title = typeof item.title === "string" ? item.title : "";
     const message = typeof item.message === "string" ? item.message : "";
+    const assignmentId =
+      typeof item.assignment_id === "string"
+        ? item.assignment_id
+        : typeof item.assignment_id === "number"
+          ? String(item.assignment_id)
+          : "";
+    const taskId =
+      typeof item.task_id === "string"
+        ? item.task_id
+        : typeof item.task_id === "number"
+          ? String(item.task_id)
+          : "";
     const occurredAt =
-      typeof item.occurred_at === "string" ? item.occurred_at : "";
+      typeof item.occurred_at === "string"
+        ? item.occurred_at
+        : typeof item.occurredAt === "string"
+          ? item.occurredAt
+          : "";
+
+    if (!id) {
+      continue;
+    }
 
     const normalized: NotificationItem = {
       id,
       type,
       title,
       message,
+      assignmentId,
+      taskId,
       occurredAt,
     };
 
-    if (id) {
-      if (!deduped.has(id)) {
-        deduped.set(id, normalized);
-      }
-      continue;
+    if (!deduped.has(id)) {
+      deduped.set(id, normalized);
     }
-
-    withoutId.push(normalized);
   }
 
-  return [...deduped.values(), ...withoutId].sort((a, b) => {
+  return [...deduped.values()].sort((a, b) => {
     const aTime = parseOccurredAtMs(a.occurredAt);
     const bTime = parseOccurredAtMs(b.occurredAt);
     const aValid = Number.isFinite(aTime);
@@ -169,6 +223,141 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
 
     return 0;
   });
+};
+
+const extractTaskAssignedEventId = (id: string): number | null => {
+  const match = id.match(/^task_assigned_(\d+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const findMaxTaskAssignedEventId = (list: NotificationItem[]): number | null => {
+  let max: number | null = null;
+
+  for (const item of list) {
+    if (item.type !== "task_assigned") {
+      continue;
+    }
+
+    const eventId = extractTaskAssignedEventId(item.id);
+    if (eventId == null) {
+      continue;
+    }
+
+    if (max == null || eventId > max) {
+      max = eventId;
+    }
+  }
+
+  return max;
+};
+
+const mergeNotificationsById = (
+  current: NotificationItem[],
+  incoming: NotificationItem[],
+): NotificationItem[] => {
+  const map = new Map<string, NotificationItem>();
+
+  for (const item of current) {
+    map.set(item.id, item);
+  }
+
+  for (const item of incoming) {
+    map.set(item.id, item);
+  }
+
+  return [...map.values()].sort((a, b) => {
+    const aTime = parseOccurredAtMs(a.occurredAt);
+    const bTime = parseOccurredAtMs(b.occurredAt);
+    const aValid = Number.isFinite(aTime);
+    const bValid = Number.isFinite(bTime);
+
+    if (aValid && bValid && aTime !== bTime) {
+      return bTime - aTime;
+    }
+
+    if (aValid && !bValid) {
+      return -1;
+    }
+
+    if (!aValid && bValid) {
+      return 1;
+    }
+
+    return 0;
+  });
+};
+
+const summarizeRawNotifications = (payload: unknown) => {
+  const rows = extractDataNotifications(payload);
+  let missingIdCount = 0;
+  let taskAssignedRawCount = 0;
+
+  const taskAssignedSamples: Array<{
+    id: string;
+    type: string;
+    assignment_id: string;
+    task_id: string;
+    occurred_at: string;
+  }> = [];
+
+  for (const row of rows) {
+    const item = unwrapNotificationRow(row);
+    if (!item) {
+      continue;
+    }
+
+    const id =
+      typeof item.id === "string"
+        ? item.id
+        : typeof item.id === "number"
+          ? String(item.id)
+          : "";
+    const type = typeof item.type === "string" ? item.type : "";
+
+    if (!id) {
+      missingIdCount += 1;
+    }
+
+    if (type === "task_assigned") {
+      taskAssignedRawCount += 1;
+      if (taskAssignedSamples.length < 10) {
+        taskAssignedSamples.push({
+          id,
+          type,
+          assignment_id:
+            typeof item.assignment_id === "string"
+              ? item.assignment_id
+              : typeof item.assignment_id === "number"
+                ? String(item.assignment_id)
+                : "",
+          task_id:
+            typeof item.task_id === "string"
+              ? item.task_id
+              : typeof item.task_id === "number"
+                ? String(item.task_id)
+                : "",
+          occurred_at:
+            typeof item.occurred_at === "string"
+              ? item.occurred_at
+              : typeof item.occurredAt === "string"
+                ? item.occurredAt
+                : "",
+        });
+      }
+    }
+  }
+
+  return {
+    rawCount: rows.length,
+    missingIdCount,
+    taskAssignedRawCount,
+    taskAssignedSamples,
+  };
 };
 
 const typeMeta: Record<NotificationType, { label: string; className: string }> =
@@ -222,13 +411,12 @@ export default function NotificationsPage() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
 
-  const limit = useMemo(
-    () => parseLimit(searchParams.get("limit")),
-    [searchParams],
-  );
+  const limit = useMemo(() => NOTIFICATIONS_LIMIT, []);
   const debugMode = searchParams.get("debug") === "1";
   const currentUserId =
-    (session?.user as { id?: string } | undefined)?.id ?? session?.user?.email ?? "";
+    (session?.user as { id?: string } | undefined)?.id ??
+    session?.user?.email ??
+    "";
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -240,19 +428,29 @@ export default function NotificationsPage() {
 
   const requestSeqRef = useRef(0);
   const activeUserRef = useRef(currentUserId);
+  const abortRef = useRef<AbortController | null>(null);
+  const notificationsRef = useRef<NotificationItem[]>([]);
+  const sinceIdRef = useRef<number | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     const seq = ++requestSeqRef.current;
     const requestUser = currentUserId;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       const params = new URLSearchParams({ limit: String(limit) });
+      if (sinceIdRef.current != null) {
+        params.set("since_id", String(sinceIdRef.current));
+      }
       if (debugMode) {
         params.set("debug", "1");
       }
 
-      const response = await fetch(`/api/notifications?${params.toString()}`, {
+      const response = await fetch(`/api/v1/notifications?${params.toString()}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
 
       if (
@@ -272,34 +470,63 @@ export default function NotificationsPage() {
 
       const payload = (await response.json()) as unknown;
 
-      if (seq !== requestSeqRef.current || requestUser !== activeUserRef.current) {
+      if (
+        seq !== requestSeqRef.current ||
+        requestUser !== activeUserRef.current
+      ) {
         return;
       }
 
       const backendPayload = unwrapDebugPayload(payload);
       const normalized = normalizeNotifications(backendPayload);
+      const rawSummary = summarizeRawNotifications(backendPayload);
+      const merged = mergeNotificationsById(notificationsRef.current, normalized);
+      notificationsRef.current = merged;
+
+      const maxTaskAssignedEventId = findMaxTaskAssignedEventId(merged);
+      if (maxTaskAssignedEventId != null) {
+        sinceIdRef.current = maxTaskAssignedEventId;
+      }
 
       console.log("[notifications-debug]", {
         currentUserId: requestUser,
-        "notifications.length": normalized.length,
-        "notifications.map": normalized.map((n) => ({
-          id: n.id,
-          type: n.type,
-          occurred_at: n.occurredAt,
-        })),
+        since_id: sinceIdRef.current,
+        "raw.notifications.length": rawSummary.rawCount,
+        "raw.missing_id_count": rawSummary.missingIdCount,
+        "raw.task_assigned_count": rawSummary.taskAssignedRawCount,
+        "raw.task_assigned_samples": rawSummary.taskAssignedSamples,
+        "notifications.length": merged.length,
+        "notifications.filter(task_assigned).map": merged
+          .filter((n) => n.type === "task_assigned")
+          .map((n) => ({
+            id: n.id,
+            assignment_id: n.assignmentId,
+            task_id: n.taskId,
+            occurred_at: n.occurredAt,
+          })),
       });
 
-      setNotifications(normalized);
+      setNotifications(merged);
       setDebugPayload(payload);
       setDebugInfo(asRecord(payload)?.debug as DebugEnvelope["debug"]);
       setError(null);
-    } catch {
-      if (seq !== requestSeqRef.current || requestUser !== activeUserRef.current) {
+    } catch (error) {
+      if ((error as { name?: string } | null)?.name === "AbortError") {
+        return;
+      }
+
+      if (
+        seq !== requestSeqRef.current ||
+        requestUser !== activeUserRef.current
+      ) {
         return;
       }
       setError("通知の取得に失敗しました");
     } finally {
-      if (seq === requestSeqRef.current && requestUser === activeUserRef.current) {
+      if (
+        seq === requestSeqRef.current &&
+        requestUser === activeUserRef.current
+      ) {
         setLoading(false);
       }
     }
@@ -307,6 +534,8 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     activeUserRef.current = currentUserId;
+    sinceIdRef.current = null;
+    notificationsRef.current = [];
     setNotifications([]);
     setLoading(true);
     setError(null);
@@ -318,16 +547,33 @@ export default function NotificationsPage() {
       void fetchNotifications();
     };
 
+    const onTaskAssigned = () => {
+      void fetchNotifications();
+    };
+
     const onFocus = () => {
       void fetchNotifications();
     };
 
     window.addEventListener("kajishare:group-joined", onGroupJoined);
+    window.addEventListener("kajishare:task-assigned", onTaskAssigned);
     window.addEventListener("focus", onFocus);
 
     return () => {
       window.removeEventListener("kajishare:group-joined", onGroupJoined);
+      window.removeEventListener("kajishare:task-assigned", onTaskAssigned);
       window.removeEventListener("focus", onFocus);
+    };
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void fetchNotifications();
+    }, 30_000);
+
+    return () => {
+      abortRef.current?.abort();
+      window.clearInterval(timer);
     };
   }, [fetchNotifications]);
 
@@ -350,18 +596,17 @@ export default function NotificationsPage() {
             <p>source: data.notifications (fixed)</p>
             <p>normalized count: {notifications.length}</p>
             <p>
-              task_assigned count: {
-                notifications.filter((item) => item.type === "task_assigned").length
-              }
-            </p>
-            <p>
-              member_joined count: {
-                notifications.filter((item) => item.type === "member_joined").length
+              task_assigned count:{" "}
+              {
+                notifications.filter((item) => item.type === "task_assigned")
+                  .length
               }
             </p>
             <p>status: {String(debugInfo?.response?.status ?? "(unknown)")}</p>
             <details className="mt-2">
-              <summary className="cursor-pointer font-medium">response body</summary>
+              <summary className="cursor-pointer font-medium">
+                response body
+              </summary>
               <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded border border-slate-200 bg-white p-2 text-[11px] dark:border-slate-700 dark:bg-slate-950">
                 {JSON.stringify(debugPayload, null, 2)}
               </pre>
@@ -381,12 +626,12 @@ export default function NotificationsPage() {
           </div>
         ) : null}
 
-        {notifications.map((notification, index) => {
+        {notifications.map((notification) => {
           const meta = getTypeMeta(notification.type);
 
           return (
             <article
-              key={notification.id || `${notification.occurredAt}-${index}`}
+              key={notification.id}
               className="rounded-lg border bg-white px-4 py-3 shadow-sm dark:bg-slate-950"
             >
               <div className="flex items-center justify-between gap-2">
