@@ -15,7 +15,7 @@ import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
-const POLLING_INTERVAL_MS = 30_000;
+const POLLING_INTERVAL_MS = 7_000;
 const NOTIFICATIONS_LIMIT = 100;
 
 const getSeenKey = (user: { id?: string | null; email?: string | null }) => {
@@ -103,6 +103,26 @@ const extractNotifications = (payload: unknown): unknown[] => {
   const list = data?.notifications;
 
   return Array.isArray(list) ? list : [];
+};
+
+const extractViewerUserId = (payload: unknown): string => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+
+  const candidate =
+    data?.viewer_user_id ??
+    data?.viewerUserId ??
+    root?.viewer_user_id ??
+    root?.viewerUserId;
+
+  if (typeof candidate === "string") {
+    return candidate;
+  }
+  if (typeof candidate === "number") {
+    return String(candidate);
+  }
+
+  return "";
 };
 
 const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => {
@@ -219,43 +239,21 @@ const extractLatestNotificationMeta = (
   return latest;
 };
 
-const extractTaskAssignedEventId = (id: string): number | null => {
-  const match = id.match(/^task_assigned_(\d+)$/);
-  if (!match) {
-    return null;
+const extractLatestTaskAssignedEventId = (payload: unknown): string => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+
+  const candidate =
+    data?.latest_task_assigned_event_id ?? data?.latestTaskAssignedEventId;
+
+  if (typeof candidate === "string" && candidate.trim()) {
+    return candidate.trim();
+  }
+  if (typeof candidate === "number") {
+    return String(candidate);
   }
 
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const findMaxTaskAssignedEventIdInPayload = (payload: unknown): number | null => {
-  const notifications = extractNotifications(payload);
-  let max: number | null = null;
-
-  for (const row of notifications) {
-    const item = unwrapNotificationRow(row);
-    if (!item) {
-      continue;
-    }
-
-    const type = pickFirstString(item, ["type"]);
-    if (type !== "task_assigned") {
-      continue;
-    }
-
-    const id = pickFirstString(item, ["id"]);
-    const eventId = extractTaskAssignedEventId(id);
-    if (eventId == null) {
-      continue;
-    }
-
-    if (max == null || eventId > max) {
-      max = eventId;
-    }
-  }
-
-  return max;
+  return "";
 };
 
 export default function UserButton() {
@@ -275,7 +273,8 @@ export default function UserButton() {
   );
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const sinceIdRef = useRef<number | null>(null);
+  const sinceIdRef = useRef<string | null>(null);
+  const inFlightCountRef = useRef(0);
 
   const seenKey = useMemo(
     () =>
@@ -324,73 +323,100 @@ export default function UserButton() {
       return;
     }
 
-    const params = new URLSearchParams({ limit: String(NOTIFICATIONS_LIMIT) });
+    const params = new URLSearchParams({
+      type: "task_assigned",
+      limit: String(NOTIFICATIONS_LIMIT),
+    });
+    if (pathname === "/records") {
+      params.set("for_records", "true");
+    }
     if (sinceIdRef.current != null) {
-      params.set("since_id", String(sinceIdRef.current));
+      params.set("since_id", sinceIdRef.current);
     }
 
-    const res = await fetch(`/api/v1/notifications?${params.toString()}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    }).catch((error) => {
-      if ((error as { name?: string } | null)?.name === "AbortError") {
-        return null;
-      }
-
-      return null;
+    inFlightCountRef.current += 1;
+    console.log("[notifications-bell-inflight]", {
+      count: inFlightCountRef.current,
     });
 
-    if (!res?.ok) {
-      const detail = await res?.json().catch(() => null);
-      console.warn("[notifications-bell] fetch failed", {
-        status: res?.status ?? "no-response",
-        detail,
-      });
-      return;
-    }
-
-    const payload = (await res.json().catch(() => null)) as unknown;
-
-    const maxTaskAssignedEventId = findMaxTaskAssignedEventIdInPayload(payload);
-    if (maxTaskAssignedEventId != null) {
-      sinceIdRef.current = maxTaskAssignedEventId;
-    }
-
-    if (seq !== requestSeqRef.current) {
-      return;
-    }
-
-    const latest = extractLatestNotificationMeta(payload);
-
-    if (!latest) {
-      return;
-    }
-
-    setLatestOccurredAt(latest.occurredAt);
-    setLatestFingerprint(latest.fingerprint);
-
-    let seen = "";
-    let seenFingerprint = "";
     try {
-      seen = window.localStorage.getItem(seenKey) ?? "";
-      seenFingerprint = window.localStorage.getItem(seenFingerprintKey) ?? "";
-    } catch {
-      seen = "";
-      seenFingerprint = "";
+      const res = await fetch(`/api/v1/notifications?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      }).catch((error) => {
+        if ((error as { name?: string } | null)?.name === "AbortError") {
+          return null;
+        }
+
+        return null;
+      });
+
+      if (!res?.ok) {
+        const detail = await res?.json().catch(() => null);
+        console.warn("[notifications-bell] fetch failed", {
+          status: res?.status ?? "no-response",
+          detail,
+        });
+        return;
+      }
+
+      const payload = (await res.json().catch(() => null)) as unknown;
+
+      const viewerUserId = extractViewerUserId(payload);
+      const sessionUserId =
+        (session?.user as { id?: string } | undefined)?.id ?? "";
+      if (viewerUserId && sessionUserId && viewerUserId !== sessionUserId) {
+        return;
+      }
+
+      const latestTaskAssignedEventId = extractLatestTaskAssignedEventId(payload);
+      if (latestTaskAssignedEventId) {
+        sinceIdRef.current = latestTaskAssignedEventId;
+      }
+
+      if (seq !== requestSeqRef.current) {
+        return;
+      }
+
+      const latest = extractLatestNotificationMeta(payload);
+
+      if (!latest) {
+        return;
+      }
+
+      setLatestOccurredAt(latest.occurredAt);
+      setLatestFingerprint(latest.fingerprint);
+
+      let seen = "";
+      let seenFingerprint = "";
+      try {
+        seen = window.localStorage.getItem(seenKey) ?? "";
+        seenFingerprint = window.localStorage.getItem(seenFingerprintKey) ?? "";
+      } catch {
+        seen = "";
+        seenFingerprint = "";
+      }
+
+      if (!seen || !seenFingerprint) {
+        setHasNewNotification(true);
+        return;
+      }
+
+      const latestTime = parseOccurredAtMs(latest.occurredAt);
+      const seenTime = parseOccurredAtMs(seen);
+      const isNewByTime = Number.isFinite(latestTime) && latestTime > seenTime;
+      const isNewByFingerprint = latest.fingerprint !== seenFingerprint;
+
+      setHasNewNotification(isNewByTime || isNewByFingerprint);
+    } finally {
+      if (inFlightCountRef.current > 0) {
+        inFlightCountRef.current -= 1;
+      }
+      console.log("[notifications-bell-inflight]", {
+        count: inFlightCountRef.current,
+      });
     }
-
-    if (!seen || !seenFingerprint) {
-      setHasNewNotification(true);
-      return;
-    }
-
-    const latestTime = parseOccurredAtMs(latest.occurredAt);
-    const seenTime = parseOccurredAtMs(seen);
-    const isNewByTime = Number.isFinite(latestTime) && latestTime > seenTime;
-    const isNewByFingerprint = latest.fingerprint !== seenFingerprint;
-
-    setHasNewNotification(isNewByTime || isNewByFingerprint);
-  }, [seenFingerprintKey, seenKey, session]);
+  }, [pathname, seenFingerprintKey, seenKey, session]);
 
   useEffect(() => {
     void fetchLatestNotification();
@@ -423,7 +449,7 @@ export default function UserButton() {
     setLatestOccurredAt(null);
     setLatestFingerprint(null);
     sinceIdRef.current = null;
-  }, [seenKey, seenFingerprintKey]);
+  }, [pathname, seenKey, seenFingerprintKey]);
 
   useEffect(() => {
     if (pathname === "/notifications") {

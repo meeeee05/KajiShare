@@ -99,6 +99,43 @@ const extractDataNotifications = (payload: unknown): unknown[] => {
   return Array.isArray(list) ? list : [];
 };
 
+const extractViewerUserId = (payload: unknown): string => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+
+  const candidate =
+    data?.viewer_user_id ??
+    data?.viewerUserId ??
+    root?.viewer_user_id ??
+    root?.viewerUserId;
+
+  if (typeof candidate === "string") {
+    return candidate;
+  }
+  if (typeof candidate === "number") {
+    return String(candidate);
+  }
+
+  return "";
+};
+
+const extractLatestTaskAssignedEventId = (payload: unknown): string => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+
+  const candidate =
+    data?.latest_task_assigned_event_id ?? data?.latestTaskAssignedEventId;
+
+  if (typeof candidate === "string" && candidate.trim()) {
+    return candidate.trim();
+  }
+  if (typeof candidate === "number") {
+    return String(candidate);
+  }
+
+  return "";
+};
+
 const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => {
   const root = asRecord(row);
   if (!root) {
@@ -223,37 +260,6 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
 
     return 0;
   });
-};
-
-const extractTaskAssignedEventId = (id: string): number | null => {
-  const match = id.match(/^task_assigned_(\d+)$/);
-  if (!match) {
-    return null;
-  }
-
-  const parsed = Number(match[1]);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-const findMaxTaskAssignedEventId = (list: NotificationItem[]): number | null => {
-  let max: number | null = null;
-
-  for (const item of list) {
-    if (item.type !== "task_assigned") {
-      continue;
-    }
-
-    const eventId = extractTaskAssignedEventId(item.id);
-    if (eventId == null) {
-      continue;
-    }
-
-    if (max == null || eventId > max) {
-      max = eventId;
-    }
-  }
-
-  return max;
 };
 
 const mergeNotificationsById = (
@@ -430,7 +436,8 @@ export default function NotificationsPage() {
   const activeUserRef = useRef(currentUserId);
   const abortRef = useRef<AbortController | null>(null);
   const notificationsRef = useRef<NotificationItem[]>([]);
-  const sinceIdRef = useRef<number | null>(null);
+  const sinceIdRef = useRef<string | null>(null);
+  const inFlightCountRef = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
     const seq = ++requestSeqRef.current;
@@ -440,13 +447,21 @@ export default function NotificationsPage() {
     abortRef.current = controller;
 
     try {
-      const params = new URLSearchParams({ limit: String(limit) });
+      const params = new URLSearchParams({
+        type: "task_assigned",
+        limit: String(limit),
+      });
       if (sinceIdRef.current != null) {
-        params.set("since_id", String(sinceIdRef.current));
+        params.set("since_id", sinceIdRef.current);
       }
       if (debugMode) {
         params.set("debug", "1");
       }
+
+      inFlightCountRef.current += 1;
+      console.log("[notifications-inflight]", {
+        count: inFlightCountRef.current,
+      });
 
       const response = await fetch(`/api/v1/notifications?${params.toString()}`, {
         cache: "no-store",
@@ -478,18 +493,27 @@ export default function NotificationsPage() {
       }
 
       const backendPayload = unwrapDebugPayload(payload);
+      const viewerUserId = extractViewerUserId(backendPayload);
+      const sessionUserId =
+        (session?.user as { id?: string } | undefined)?.id ?? "";
+      if (viewerUserId && sessionUserId && viewerUserId !== sessionUserId) {
+        return;
+      }
+
       const normalized = normalizeNotifications(backendPayload);
       const rawSummary = summarizeRawNotifications(backendPayload);
       const merged = mergeNotificationsById(notificationsRef.current, normalized);
       notificationsRef.current = merged;
 
-      const maxTaskAssignedEventId = findMaxTaskAssignedEventId(merged);
-      if (maxTaskAssignedEventId != null) {
-        sinceIdRef.current = maxTaskAssignedEventId;
+      const latestTaskAssignedEventId =
+        extractLatestTaskAssignedEventId(backendPayload);
+      if (latestTaskAssignedEventId) {
+        sinceIdRef.current = latestTaskAssignedEventId;
       }
 
       console.log("[notifications-debug]", {
         currentUserId: requestUser,
+        viewer_user_id: viewerUserId || "(none)",
         since_id: sinceIdRef.current,
         "raw.notifications.length": rawSummary.rawCount,
         "raw.missing_id_count": rawSummary.missingIdCount,
@@ -523,6 +547,13 @@ export default function NotificationsPage() {
       }
       setError("通知の取得に失敗しました");
     } finally {
+      if (inFlightCountRef.current > 0) {
+        inFlightCountRef.current -= 1;
+      }
+      console.log("[notifications-inflight]", {
+        count: inFlightCountRef.current,
+      });
+
       if (
         seq === requestSeqRef.current &&
         requestUser === activeUserRef.current

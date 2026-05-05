@@ -10,6 +10,37 @@ type Props = {
   apiUrl?: string;
 };
 
+type AnyRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): AnyRecord | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as AnyRecord;
+};
+
+const extractCreatedTaskId = (payload: unknown): string | undefined => {
+  const root = asRecord(payload);
+  if (!root) {
+    return undefined;
+  }
+
+  const task =
+    asRecord(root.task) ?? asRecord(root.data) ?? asRecord(asRecord(root.data)?.task);
+  const source = task ?? root;
+  const id = source.id ?? source.task_id;
+
+  if (typeof id === "string" && id.trim()) {
+    return id;
+  }
+  if (typeof id === "number") {
+    return String(id);
+  }
+
+  return undefined;
+};
+
 export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -87,6 +118,54 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
       }
 
       if (res.ok) {
+        const created = (await res.json().catch(() => null)) as unknown;
+        const createdTaskId = extractCreatedTaskId(created);
+
+        if (!createdTaskId) {
+          setError("タスクは作成されましたが task_id を取得できませんでした。");
+          router.refresh();
+          return;
+        }
+
+        const assignmentEndpoint = `${v1Base}/tasks/${encodeURIComponent(createdTaskId)}/assignments`;
+        const assignmentRes = await fetch(assignmentEndpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            assignment: {
+              status: "not_started",
+            },
+          }),
+        }).catch(() => null);
+
+        if (
+          await handleGuestSessionExpiryResponse({
+            response: assignmentRes,
+            sessionUser: session?.user,
+            onRedirect: (path) => router.replace(path),
+          })
+        ) {
+          return;
+        }
+
+        if (assignmentRes?.status === 201) {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("kajishare:task-assigned"));
+          }
+        } else {
+          const assignmentError = await assignmentRes?.json().catch(() => null);
+          const message =
+            (assignmentError as { error?: string; message?: string } | null)
+              ?.error ??
+            (assignmentError as { error?: string; message?: string } | null)
+              ?.message ??
+            `割り振り作成に失敗しました。(status: ${assignmentRes?.status ?? "network"})`;
+          setError(`タスク作成後の割り振り作成に失敗: ${message}`);
+        }
+
         setName("");
         setPoint("");
         setDescription("");
