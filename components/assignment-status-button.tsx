@@ -278,14 +278,6 @@ const buildAssignmentCreatePayloads = (
   ];
 };
 
-const notifyTaskAssigned = () => {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.dispatchEvent(new CustomEvent("kajishare:task-assigned"));
-};
-
 export default function AssignmentStatusButton({
   assignmentId,
   taskId,
@@ -525,7 +517,6 @@ export default function AssignmentStatusButton({
             if (createdId != null) {
               currentAssignmentId = String(createdId);
               setLocalAssignmentId(currentAssignmentId);
-              notifyTaskAssigned();
               break;
             }
 
@@ -585,7 +576,6 @@ export default function AssignmentStatusButton({
             } catch {
               // ignore localStorage access errors
             }
-            notifyTaskAssigned();
             router.refresh();
             return;
           }
