@@ -530,7 +530,7 @@ export default async function GroupsPage() {
             <div className="mt-4 space-y-3">
               <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                 <span className="font-semibold text-slate-600 dark:text-slate-300">
-                  share_key
+                  招待コード
                 </span>
                 <span className="font-medium break-all">
                   {group.share_key ?? "-"}

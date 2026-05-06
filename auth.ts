@@ -146,6 +146,7 @@ export const config: NextAuthConfig = {
   pages: {
     signIn: "/auth/signin",
     signOut: "/auth/signin",
+    error: "/auth/error",
   },
   basePath: "/api/auth",
   callbacks: {
