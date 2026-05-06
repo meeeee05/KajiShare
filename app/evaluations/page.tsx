@@ -780,6 +780,9 @@ export default async function EvaluationsPage() {
           <p className="text-slate-600 dark:text-slate-300">
             参加中のグループがありません。
           </p>
+          <p className="text-slate-600 dark:text-slate-300">
+            同じグループの参加者が実施したタスクを評価することができます。
+          </p>
           <Link
             href="/groups/empty"
             className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"

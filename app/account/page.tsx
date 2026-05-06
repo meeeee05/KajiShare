@@ -41,7 +41,7 @@ export default async function AccountPage() {
         ) : null}
       </div>
 
-      <AccountDeleteButton apiUrl={apiUrl} />
+      {!isGuest ? <AccountDeleteButton apiUrl={apiUrl} /> : null}
     </div>
   );
 }

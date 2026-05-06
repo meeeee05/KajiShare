@@ -136,7 +136,9 @@ const extractLatestTaskAssignedEventId = (payload: unknown): string => {
   return "";
 };
 
-const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => {
+const unwrapNotificationRow = (
+  row: unknown,
+): Record<string, unknown> | null => {
   const root = asRecord(row);
   if (!root) {
     return null;
@@ -153,11 +155,12 @@ const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => 
   const notification = asRecord(root.notification);
   const notificationAttributes = asRecord(notification?.attributes);
   if (notificationAttributes) {
+    const notificationId = notification?.id;
     return {
       ...notification,
       ...notificationAttributes,
       id:
-        notification.id ??
+        notificationId ??
         (typeof root.id === "string" || typeof root.id === "number"
           ? root.id
           : undefined),
@@ -167,11 +170,12 @@ const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => 
   const rowData = asRecord(root.data);
   const rowDataAttributes = asRecord(rowData?.attributes);
   if (rowDataAttributes) {
+    const rowDataId = rowData?.id;
     return {
       ...rowData,
       ...rowDataAttributes,
       id:
-        rowData.id ??
+        rowDataId ??
         (typeof root.id === "string" || typeof root.id === "number"
           ? root.id
           : undefined),
@@ -240,7 +244,7 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
     }
   }
 
-  return [...deduped.values()].sort((a, b) => {
+  return Array.from(deduped.values()).sort((a, b) => {
     const aTime = parseOccurredAtMs(a.occurredAt);
     const bTime = parseOccurredAtMs(b.occurredAt);
     const aValid = Number.isFinite(aTime);
@@ -276,7 +280,7 @@ const mergeNotificationsById = (
     map.set(item.id, item);
   }
 
-  return [...map.values()].sort((a, b) => {
+  return Array.from(map.values()).sort((a, b) => {
     const aTime = parseOccurredAtMs(a.occurredAt);
     const bTime = parseOccurredAtMs(b.occurredAt);
     const aValid = Number.isFinite(aTime);
@@ -463,10 +467,13 @@ export default function NotificationsPage() {
         count: inFlightCountRef.current,
       });
 
-      const response = await fetch(`/api/v1/notifications?${params.toString()}`, {
-        cache: "no-store",
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        `/api/v1/notifications?${params.toString()}`,
+        {
+          cache: "no-store",
+          signal: controller.signal,
+        },
+      );
 
       if (
         await handleGuestSessionExpiryResponse({
@@ -502,7 +509,10 @@ export default function NotificationsPage() {
 
       const normalized = normalizeNotifications(backendPayload);
       const rawSummary = summarizeRawNotifications(backendPayload);
-      const merged = mergeNotificationsById(notificationsRef.current, normalized);
+      const merged = mergeNotificationsById(
+        notificationsRef.current,
+        normalized,
+      );
       notificationsRef.current = merged;
 
       const latestTaskAssignedEventId =
@@ -652,9 +662,7 @@ export default function NotificationsPage() {
         ) : null}
 
         {!loading && notifications.length === 0 ? (
-          <div className="rounded-md border bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-            通知はありません
-          </div>
+          <p className="text-slate-600 dark:text-slate-300">通知はありません</p>
         ) : null}
 
         {notifications.map((notification) => {

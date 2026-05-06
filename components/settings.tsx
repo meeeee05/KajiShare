@@ -125,7 +125,9 @@ const extractViewerUserId = (payload: unknown): string => {
   return "";
 };
 
-const unwrapNotificationRow = (row: unknown): Record<string, unknown> | null => {
+const unwrapNotificationRow = (
+  row: unknown,
+): Record<string, unknown> | null => {
   const root = asRecord(row);
   if (!root) {
     return null;
@@ -369,7 +371,8 @@ export default function UserButton() {
         return;
       }
 
-      const latestTaskAssignedEventId = extractLatestTaskAssignedEventId(payload);
+      const latestTaskAssignedEventId =
+        extractLatestTaskAssignedEventId(payload);
       if (latestTaskAssignedEventId) {
         sinceIdRef.current = latestTaskAssignedEventId;
       }

@@ -334,7 +334,11 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
         </div>
       </div>
       <p className="mt-10 text-sm text-gray-600 text-center">
-        既にグループを登録済みの方は再度サインインして下さい
+        既にグループを登録済みの方は再度
+        <Link href="/auth/signin" className="text-blue-600 hover:underline">
+          サインイン
+        </Link>
+        して下さい
       </p>
       {showBackLink ? (
         <Link

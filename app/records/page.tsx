@@ -1363,6 +1363,9 @@ export default async function RecordsPage() {
           <p className="text-slate-600 dark:text-slate-300">
             参加中のグループがありません。
           </p>
+          <p className="text-slate-600 dark:text-slate-300">
+            グループに参加することで担当タスクを確認できます。
+          </p>
           <Link
             href="/groups/empty"
             className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
