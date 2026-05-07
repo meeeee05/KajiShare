@@ -1,3 +1,4 @@
+// ゲストユーザーリダイレクト管理
 "use client";
 
 import { signOut } from "next-auth/react";
@@ -8,20 +9,32 @@ import {
   isGuestSessionUser,
 } from "@/lib/guest-session";
 
+// ストレージクリアエラーを報告
+const reportStorageClearError = (
+  storageName: "localStorage" | "sessionStorage",
+  error: unknown,
+) => {
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(`[guest-session] Failed to clear ${storageName}`, error);
+  }
+};
+
+// ゲストユーザーデータをクリア
 export const clearGuestLocalData = () => {
   try {
     window.localStorage.clear();
-  } catch {
-    // ignore storage errors
+  } catch (error) {
+    reportStorageClearError("localStorage", error);
   }
 
   try {
     window.sessionStorage.clear();
-  } catch {
-    // ignore storage errors
+  } catch (error) {
+    reportStorageClearError("sessionStorage", error);
   }
 };
 
+// ゲストセッション期限切れレスポンスを処理
 export const handleGuestSessionExpiryResponse = async (params: {
   response: Response | null;
   sessionUser: unknown;

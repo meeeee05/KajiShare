@@ -2504,19 +2504,8 @@ export default async function Home() {
       return bTime - aTime;
     });
 
-  const uniqueEvaluationsByTaskId = new Map<string, AssignmentItem>();
-  for (const row of evaluations) {
-    const taskIdKey = normalizeText(row.assignment.taskId);
-    if (!taskIdKey || uniqueEvaluationsByTaskId.has(taskIdKey)) {
-      continue;
-    }
-    uniqueEvaluationsByTaskId.set(taskIdKey, row.assignment);
-  }
-
-  const evaluatedMyExecutedTasks = Array.from(
-    uniqueEvaluationsByTaskId.values(),
-  )
-    .map((assignment) => {
+  const evaluatedMyExecutedTasks = evaluations
+    .map(({ assignment }) => {
       const taskIdKey = normalizeText(assignment.taskId);
       const matched = taskGroupByTaskId.get(taskIdKey);
 

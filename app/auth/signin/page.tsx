@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-
 import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { GUEST_EXPIRED_MESSAGE } from "@/lib/guest-session";

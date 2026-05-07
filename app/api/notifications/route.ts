@@ -1,9 +1,12 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 
+// 通知取得件数
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+const FETCH_ERROR_MESSAGE = "通知の取得に失敗しました";
 
+// クエリパラメータからlimitを確認（不正入力や極端な値を補正）
 const parseLimit = (rawLimit: string | null): number => {
   const parsed = Number(rawLimit);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -13,6 +16,7 @@ const parseLimit = (rawLimit: string | null): number => {
   return Math.min(Math.floor(parsed), MAX_LIMIT);
 };
 
+// Authorizationヘッダーの値をマスク（デバッグ用）
 const maskAuthorization = (value: string) => {
   if (!value) {
     return "";
@@ -26,33 +30,51 @@ const maskAuthorization = (value: string) => {
   return `${trimmed.slice(0, 14)}...${trimmed.slice(-4)}`;
 };
 
+// エラー時のレスポンス返却
+const jsonError = (status: number, message: string) => {
+  return NextResponse.json({ error: message }, { status });
+};
+
+const parseJsonSafely = async (res: Response) => {
+  return res.json().catch(() => null);
+};
+
+// 認証チェック、通知APIへ投げるためのURLとパラメータ作成
 export async function GET(req: Request) {
   const session = await auth();
   const idToken = (session?.user as { idToken?: string } | undefined)?.idToken;
 
   if (!idToken) {
-    return NextResponse.json(
-      { error: "認証情報がありません" },
-      { status: 401 },
-    );
+    return jsonError(401, "認証情報がありません");
   }
 
   const apiUrl = process.env.API_URL;
   if (!apiUrl) {
-    return NextResponse.json(
-      { error: "API_URL is not configured" },
-      { status: 500 },
-    );
+    return jsonError(500, "API_URL is not configured");
   }
 
   const url = new URL(req.url);
   const limit = parseLimit(url.searchParams.get("limit"));
   const debug = url.searchParams.get("debug") === "1";
+  const type = url.searchParams.get("type");
+  const sinceId = url.searchParams.get("since_id");
+  const forRecords = url.searchParams.get("for_records");
 
   const base = apiUrl.replace(/\/+$/, "");
   const v1Base = base.endsWith("/api/v1") ? base : `${base}/api/v1`;
-  const endpoint = `${v1Base}/notifications?limit=${limit}`;
+  const backendParams = new URLSearchParams({ limit: String(limit) });
+  if (type) {
+    backendParams.set("type", type);
+  }
+  if (sinceId) {
+    backendParams.set("since_id", sinceId);
+  }
+  if (forRecords) {
+    backendParams.set("for_records", forRecords);
+  }
+  const endpoint = `${v1Base}/notifications?${backendParams.toString()}`;
 
+  // APIリクエスト（認証情報付き）
   try {
     const res = await fetch(endpoint, {
       headers: {
@@ -61,7 +83,7 @@ export async function GET(req: Request) {
       cache: "no-store",
     });
 
-    const payload = await res.json().catch(() => null);
+    const payload = await parseJsonSafely(res);
 
     if (debug) {
       return NextResponse.json(
@@ -88,17 +110,11 @@ export async function GET(req: Request) {
     }
 
     if (!res.ok) {
-      return NextResponse.json(
-        { error: "通知の取得に失敗しました" },
-        { status: res.status || 502 },
-      );
+      return jsonError(res.status || 502, FETCH_ERROR_MESSAGE);
     }
 
     return NextResponse.json(payload, { status: 200 });
   } catch {
-    return NextResponse.json(
-      { error: "通知の取得に失敗しました" },
-      { status: 502 },
-    );
+    return jsonError(502, FETCH_ERROR_MESSAGE);
   }
 }

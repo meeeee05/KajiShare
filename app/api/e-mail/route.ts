@@ -12,6 +12,7 @@ const isValidEmail = (value: string) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 };
 
+// 入力値の受け取り
 export async function POST(req: Request) {
   let body: ContactPayload;
 
@@ -50,16 +51,18 @@ export async function POST(req: Request) {
   const from = process.env.SMTP_FROM ?? user;
   const to = process.env.CONTACT_TO;
 
+  // メール送信不足設定の確認
   if (!host || !port || !user || !pass || !from || !to) {
     return NextResponse.json(
       {
         error:
-          "メール送信設定が不足しています。SMTP と CONTACT_TO を設定してください。",
+          "メール送信設定が不足しています。",
       },
       { status: 500 },
     );
   }
 
+  // 接続設定
   const transporter = nodemailer.createTransport({
     host,
     port,
@@ -70,6 +73,7 @@ export async function POST(req: Request) {
     },
   });
 
+  // メール送信
   try {
     await transporter.sendMail({
       from,

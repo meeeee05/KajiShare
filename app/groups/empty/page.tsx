@@ -14,6 +14,7 @@ export default async function EmptyGroupsPage() {
     redirect("/auth/timeout");
   }
 
+  // APIリクエスト前のゲストセッション期限切れチェック
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as any)?.idToken as string | undefined;
   const isGuestSession = isGuestSessionUser(session.user);

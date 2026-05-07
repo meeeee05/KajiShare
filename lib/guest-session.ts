@@ -1,8 +1,10 @@
+// ゲストユーザー期限切れ判定
 export const GUEST_EXPIRED_MESSAGE =
   "ゲスト利用期限が切れました。再度ログインしてください。";
 
 export const GUEST_EXPIRED_REDIRECT_PATH = "/auth/signin?guestExpired=1";
 
+// ゲストユーザかどうかを判定
 export const isGuestSessionUser = (user: unknown): boolean => {
   if (!user || typeof user !== "object") {
     return false;
@@ -12,6 +14,7 @@ export const isGuestSessionUser = (user: unknown): boolean => {
   return record.isGuest === true || record.account_type === "guest";
 };
 
+// 期限切れステータスを判定
 export const isGuestSessionExpiredStatus = (status: number): boolean =>
   status === 401;
 
@@ -41,6 +44,7 @@ const extractMessageFromRecord = (
   return undefined;
 };
 
+// 期限切れメッセージを判定
 export const isGuestSessionExpiredMessage = (payload: unknown): boolean => {
   if (typeof payload === "string") {
     return payload.trim() === GUEST_EXPIRED_MESSAGE;

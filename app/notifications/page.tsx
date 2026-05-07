@@ -468,7 +468,7 @@ export default function NotificationsPage() {
       });
 
       const response = await fetch(
-        `/api/v1/notifications?${params.toString()}`,
+        `/api/notifications?${params.toString()}`,
         {
           cache: "no-store",
           signal: controller.signal,

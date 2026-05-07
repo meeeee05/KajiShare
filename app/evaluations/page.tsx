@@ -9,31 +9,15 @@ import {
 } from "@/lib/guest-session";
 
 type AnyRecord = Record<string, unknown>;
-
-type GroupItem = {
-  id?: string;
-  name: string;
-};
-
-type MemberItem = {
-  id?: string;
-  name?: string;
-  email?: string;
-};
-
-type MembershipItem = {
-  id?: string;
-  groupId?: string;
-  member: MemberItem;
-};
-
+type GroupItem = { id?: string; name: string };
+type MemberItem = { id?: string; name?: string; email?: string };
+type MembershipItem = { id?: string; groupId?: string; member: MemberItem };
 type TaskItem = {
   id?: string;
   name: string;
   point?: string;
   description?: string;
 };
-
 type AssignmentItem = {
   id?: string;
   groupId?: string;
@@ -49,14 +33,12 @@ type AssignmentItem = {
   assigneeName?: string;
   assigneeEmail?: string;
 };
-
 type EvaluationItem = {
   assignmentId?: string;
   taskId?: string;
   evaluatorId?: string;
-  evaluatorEmail?: string;
-  evaluatorName?: string;
 };
+type GroupRow = { assignment: AssignmentItem; task: TaskItem };
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
@@ -74,7 +56,6 @@ const pickFirstString = (
   if (!obj) {
     return undefined;
   }
-
   for (const key of keys) {
     const value = obj[key];
     if (typeof value === "string" && value.trim()) {
@@ -84,516 +65,110 @@ const pickFirstString = (
       return String(value);
     }
   }
-
   return undefined;
 };
 
-const unwrapEntity = (value: AnyRecord | null) =>
-  asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
-
-const pickFromSources = (
-  sourceA: AnyRecord | null,
-  sourceB: AnyRecord | null,
-  keys: string[],
-) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
-
-const firstArray = (...values: unknown[]): unknown[] => {
-  for (const value of values) {
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
-  return [];
+const getEntity = (value: unknown) => {
+  const entity = asRecord(value);
+  const attributes = asRecord(entity?.attributes);
+  return { entity, attributes };
 };
 
-const pickRelationshipId = (
-  obj: AnyRecord | null,
-  relationshipKeys: string[],
-): string | undefined => {
-  if (!obj) {
-    return undefined;
-  }
-
-  for (const key of relationshipKeys) {
-    const rel = asRecord(obj[key]);
-    const relData = asRecord(rel?.data);
-    const direct = pickFirstString(relData, ["id"]);
-    if (direct) {
-      return direct;
-    }
-
-    const nested = asRecord(relData?.attributes) ?? asRecord(relData?.data);
-    const nestedId = pickFirstString(nested, ["id"]);
-    if (nestedId) {
-      return nestedId;
-    }
-  }
-
-  return undefined;
+const pickFromEntity = (value: unknown, keys: string[]) => {
+  const { entity, attributes } = getEntity(value);
+  return pickFirstString(attributes, keys) ?? pickFirstString(entity, keys);
 };
 
-const extractEvaluationsArray = (payload: unknown): unknown[] => {
+const pickRelationshipId = (value: unknown, key: string) => {
+  const entity = asRecord(value);
+  const relationships = asRecord(entity?.relationships);
+  const relationship = asRecord(relationships?.[key]);
+  const data = asRecord(relationship?.data);
+  return pickFirstString(data, ["id"]);
+};
+
+const toArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   const root = asRecord(payload);
   if (!root) {
     return [];
   }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.evaluations,
-    root.items,
-    root.results,
-    root.data,
-    rootData?.evaluations,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.evaluations,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
+  return Array.isArray(root.data) ? root.data : [];
 };
 
-const normalizeEvaluation = (row: unknown): EvaluationItem => {
-  const root = asRecord(row);
-  const evaluationRoot = asRecord(root?.evaluation) ?? root;
-  const evaluation = unwrapEntity(evaluationRoot);
+const normalizeGroup = (row: unknown): GroupItem => ({
+  id: pickFromEntity(row, ["id"]),
+  name: pickFromEntity(row, ["name"]) ?? "",
+});
 
-  const evaluatorRoot =
-    asRecord(evaluationRoot?.evaluator) ??
-    asRecord(evaluationRoot?.user) ??
-    asRecord(evaluation?.evaluator) ??
-    asRecord(evaluation?.user);
-  const evaluator = unwrapEntity(evaluatorRoot);
+const normalizeMembership = (row: unknown): MembershipItem => ({
+  id: pickFromEntity(row, ["id"]),
+  groupId: pickFromEntity(row, ["group_id"]),
+  member: {
+    id: pickFromEntity(row, ["user_id"]) ?? pickRelationshipId(row, "user"),
+    name: undefined,
+    email: undefined,
+  },
+});
 
-  return {
-    assignmentId:
-      pickFromSources(evaluation, evaluationRoot, [
-        "assignment_id",
-        "assignmentId",
-        "assignment",
-      ]) ??
-      pickRelationshipId(evaluationRoot, ["assignment", "task_assignment"]) ??
-      pickRelationshipId(evaluation, ["assignment", "task_assignment"]),
-    taskId:
-      pickFromSources(evaluation, evaluationRoot, [
-        "task_id",
-        "taskId",
-        "task",
-      ]) ??
-      pickRelationshipId(evaluationRoot, ["task"]) ??
-      pickRelationshipId(evaluation, ["task"]),
-    evaluatorId:
-      pickFromSources(evaluator, evaluation, ["id", "user_id", "userId"]) ??
-      pickFromSources(evaluation, evaluationRoot, [
-        "evaluator_id",
-        "evaluatorId",
-        "user_id",
-        "userId",
-      ]) ??
-      pickRelationshipId(evaluationRoot, ["evaluator", "user", "member"]),
-    evaluatorEmail:
-      pickFromSources(evaluator, evaluation, ["email", "mail"]) ??
-      pickFromSources(evaluation, evaluationRoot, ["evaluator_email", "email"]),
-    evaluatorName:
-      pickFromSources(evaluator, evaluation, ["name", "user_name"]) ??
-      pickFromSources(evaluation, evaluationRoot, ["evaluator_name", "name"]),
-  };
-};
-
-const extractGroupsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.groups,
-    root.memberships,
-    root.data,
-    root.items,
-    root.results,
-    rootData?.groups,
-    rootData?.memberships,
-    rootData?.items,
-    rootData?.results,
-    rootDataData?.groups,
-    rootDataData?.memberships,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-};
-
-const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
-  const map = new Map<string, GroupItem>();
-
-  for (const payload of payloads) {
-    const rows = extractGroupsArray(payload);
-    for (const row of rows) {
-      const root = asRecord(row);
-      const source = asRecord(root?.group) ?? root;
-      const group = unwrapEntity(source);
-      const base = unwrapEntity(root);
-
-      const id = pickFromSources(group, base, ["id", "group_id", "groupId"]);
-      const name =
-        pickFromSources(group, base, ["name"]) ??
-        pickFromSources(source, root, ["name"]);
-
-      if (!name) {
-        continue;
-      }
-
-      const key = id ? `id:${id}` : `name:${name}`;
-      if (!map.has(key)) {
-        map.set(key, { id, name });
-      }
-    }
-  }
-
-  return Array.from(map.values());
-};
-
-const extractMembershipsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.memberships,
-    root.groups,
-    root.data,
-    root.items,
-    root.results,
-    root.rows,
-    root.list,
-    rootData?.memberships,
-    rootData?.groups,
-    rootData?.data,
-    rootData?.items,
-    rootData?.results,
-    rootData?.rows,
-    rootData?.list,
-    rootDataData?.memberships,
-    rootDataData?.groups,
-    rootDataData?.items,
-    rootDataData?.results,
-    rootDataData?.rows,
-    rootDataData?.list,
-  );
-};
-
-const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
-  const normalized: MembershipItem[] = [];
-
-  for (const payload of payloads) {
-    const rows = extractMembershipsArray(payload);
-
-    for (const row of rows) {
-      const membershipRoot = asRecord(row);
-      const membership = unwrapEntity(membershipRoot);
-      const group =
-        unwrapEntity(asRecord(membershipRoot?.group)) ??
-        unwrapEntity(asRecord(membership?.group));
-
-      const groupId =
-        pickFromSources(group, membership, ["id", "group_id", "groupId"]) ??
-        pickFirstString(membershipRoot, ["group_id", "groupId"]);
-
-      const candidateMember =
-        unwrapEntity(asRecord(membershipRoot?.member)) ??
-        unwrapEntity(asRecord(membershipRoot?.user)) ??
-        unwrapEntity(asRecord(membership?.member)) ??
-        unwrapEntity(asRecord(membership?.user)) ??
-        unwrapEntity(asRecord(membershipRoot?.account)) ??
-        unwrapEntity(asRecord(membership?.account));
-
-      normalized.push({
-        id: pickFromSources(membership, membershipRoot, [
-          "id",
-          "membership_id",
-        ]),
-        groupId,
-        member: {
-          id:
-            pickFromSources(candidateMember, membership, [
-              "id",
-              "member_id",
-              "user_id",
-              "userId",
-            ]) ??
-            pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
-          name: pickFromSources(candidateMember, membership, [
-            "name",
-            "member_name",
-          ]),
-          email: pickFromSources(candidateMember, membership, [
-            "email",
-            "mail",
-            "member_email",
-          ]),
-        },
-      });
-    }
-  }
-
-  return normalized;
-};
-
-const extractTasksArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-  const rootTask = asRecord(root.task);
-
-  return firstArray(
-    root.tasks,
-    root.items,
-    root.results,
-    root.data,
-    rootTask?.items,
-    rootTask?.tasks,
-    rootData?.tasks,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.tasks,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-};
-
-const normalizeTask = (row: unknown, index: number): TaskItem => {
-  const root = asRecord(row);
-  const taskRoot = asRecord(root?.task) ?? root;
-  const task = unwrapEntity(taskRoot);
-
-  return {
-    id:
-      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
-      pickFirstString(root, ["id", "task_id", "taskId"]),
-    name:
-      pickFromSources(task, taskRoot, ["name", "title", "task_name"]) ??
-      `タスク ${index + 1}`,
-    point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    description: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
-  };
-};
+const normalizeTask = (row: unknown, index: number): TaskItem => ({
+  id: pickFromEntity(row, ["id"]),
+  name: pickFromEntity(row, ["name"]) ?? `タスク ${index + 1}`,
+  point: pickFromEntity(row, ["point"]),
+  description: pickFromEntity(row, ["description"]),
+});
 
 const normalizeTaskDetail = (
   payload: unknown,
   fallbackTaskId?: string,
 ): TaskItem => {
   const root = asRecord(payload);
-  const taskRoot =
-    asRecord(root?.task) ??
-    asRecord(root?.data) ??
-    asRecord(root?.item) ??
-    root;
-  const task = unwrapEntity(taskRoot);
-
+  const row = asRecord(root?.data) ?? root;
   return {
-    id:
-      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
-      fallbackTaskId,
-    name:
-      pickFromSources(task, taskRoot, ["name", "title", "task_name"]) ??
-      "タスク",
-    point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    description: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
+    id: pickFromEntity(row, ["id"]) ?? fallbackTaskId,
+    name: pickFromEntity(row, ["name"]) ?? "タスク",
+    point: pickFromEntity(row, ["point"]),
+    description: pickFromEntity(row, ["description"]),
   };
 };
 
-const extractAssignmentsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
+const normalizeAssignment = (row: unknown): AssignmentItem => ({
+  id: pickFromEntity(row, ["id"]),
+  groupId: pickFromEntity(row, ["group_id"]),
+  taskId: pickFromEntity(row, ["task_id"]) ?? pickRelationshipId(row, "task"),
+  taskName: pickFromEntity(row, ["assignment_task_name"]),
+  taskPoint: pickFromEntity(row, ["task_point"]),
+  taskDescription: pickFromEntity(row, ["task_description"]),
+  membershipId:
+    pickFromEntity(row, ["membership_id"]) ??
+    pickRelationshipId(row, "membership"),
+  status: pickFromEntity(row, ["status"]),
+  completedDate: pickFromEntity(row, ["completed_date"]),
+  completedByUserId: pickFromEntity(row, ["completed_by_user_id"]),
+  assigneeId: pickFromEntity(row, ["assigned_to_id"]),
+  assigneeName: pickFromEntity(row, ["assigned_to_name"]),
+  assigneeEmail: pickFromEntity(row, ["assigned_to_email"]),
+});
 
+const normalizeEvaluation = (row: unknown): EvaluationItem => ({
+  assignmentId:
+    pickFromEntity(row, ["assignment_id"]) ??
+    pickRelationshipId(row, "assignment"),
+  taskId: pickFromEntity(row, ["task_id"]) ?? pickRelationshipId(row, "task"),
+  evaluatorId:
+    pickFromEntity(row, ["evaluator_id"]) ??
+    pickRelationshipId(row, "evaluator"),
+});
+
+const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
   const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  const directArray = firstArray(
-    root.assignments,
-    root.items,
-    root.results,
-    root.data,
-    rootData?.assignments,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.assignments,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-
-  if (directArray.length > 0) {
-    return directArray;
-  }
-
-  const singleCandidates = [
-    asRecord(root.assignment),
-    asRecord(rootData?.assignment),
-    asRecord(rootDataData?.assignment),
-    asRecord(rootData?.data),
-    root,
-  ];
-
-  for (const candidate of singleCandidates) {
-    if (!candidate) {
-      continue;
-    }
-
-    const maybeTaskId = pickFirstString(candidate, ["task_id", "taskId"]);
-    const maybeStatus = pickFirstString(candidate, [
-      "status",
-      "state",
-      "comment",
-    ]);
-    const maybeId = pickFirstString(candidate, ["id", "assignment_id"]);
-
-    if (maybeTaskId || maybeStatus || maybeId) {
-      return [candidate];
-    }
-  }
-
-  return [];
-};
-
-const normalizeAssignment = (row: unknown): AssignmentItem => {
-  const root = asRecord(row);
-  const assignmentRoot = asRecord(root?.assignment) ?? root;
-  const assignment = unwrapEntity(assignmentRoot);
-  const taskRoot =
-    asRecord(assignmentRoot?.task) ??
-    asRecord(assignment?.task) ??
-    asRecord(root?.task);
-  const task = unwrapEntity(taskRoot);
-
-  const assigneeRoot =
-    asRecord(assignmentRoot?.assignee) ??
-    asRecord(assignmentRoot?.user) ??
-    asRecord(assignment?.assignee) ??
-    asRecord(assignment?.user);
-  const assignee = unwrapEntity(assigneeRoot);
-
-  const membershipRoot =
-    asRecord(assignmentRoot?.membership) ??
-    asRecord(assignment?.membership) ??
-    asRecord(root?.membership);
-  const membership = unwrapEntity(membershipRoot);
-
-  const membershipMemberRoot =
-    asRecord(membershipRoot?.member) ??
-    asRecord(membershipRoot?.user) ??
-    asRecord(membership?.member) ??
-    asRecord(membership?.user) ??
-    asRecord(membershipRoot?.account) ??
-    asRecord(membership?.account);
-  const membershipMember = unwrapEntity(membershipMemberRoot);
-
+  const row = asRecord(root?.data) ?? root;
   return {
-    id: pickFromSources(assignment, assignmentRoot, ["id", "assignment_id"]),
-    groupId:
-      pickFromSources(assignment, assignmentRoot, ["group_id", "groupId"]) ??
-      pickFirstString(root, ["group_id", "groupId"]),
-    taskId:
-      pickFromSources(task, assignment, ["id", "task_id", "taskId"]) ??
-      pickFromSources(assignment, assignmentRoot, ["task_id", "taskId"]) ??
-      pickFirstString(root, ["task_id", "taskId"]),
-    taskName: pickFromSources(task, taskRoot, ["name", "title", "task_name"]),
-    taskPoint: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    taskDescription: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
-    membershipId:
-      pickFromSources(assignment, assignmentRoot, [
-        "membership_id",
-        "membershipId",
-      ]) ??
-      pickFromSources(membership, membershipRoot, ["id", "membership_id"]) ??
-      pickFirstString(root, ["membership_id", "membershipId"]),
-    status: pickFromSources(assignment, assignmentRoot, [
-      "status",
-      "state",
-      "comment",
-    ]),
-    completedDate: pickFromSources(assignment, assignmentRoot, [
-      "completed_date",
-      "completedDate",
-      "done_at",
-      "doneAt",
-      "finished_at",
-      "finishedAt",
-    ]),
-    completedByUserId:
-      pickFromSources(assignment, assignmentRoot, [
-        "completed_by_user_id",
-        "completedByUserId",
-      ]) ??
-      pickFirstString(root, ["completed_by_user_id", "completedByUserId"]),
-    assigneeId:
-      pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
-      pickFromSources(membershipMember, membership, [
-        "id",
-        "user_id",
-        "userId",
-      ]) ??
-      pickFromSources(assigneeRoot, assignmentRoot, [
-        "assignee_id",
-        "member_id",
-        "executor_id",
-        "done_by",
-      ]),
-    assigneeName:
-      pickFromSources(assignee, assignment, ["name", "user_name"]) ??
-      pickFromSources(membershipMember, membership, ["name", "user_name"]),
-    assigneeEmail:
-      pickFromSources(assignee, assignment, ["email", "mail"]) ??
-      pickFromSources(membershipMember, membership, ["email", "mail"]),
+    id: pickFromEntity(row, ["id"]),
+    name: pickFromEntity(row, ["name"]),
+    email: pickFromEntity(row, ["email"]),
   };
 };
 
@@ -603,20 +178,14 @@ const isSameMember = (a: MemberItem, b: MemberItem) => {
   if (aId && bId) {
     return aId === bId;
   }
-
   const aEmail = normalizeText(a.email);
   const bEmail = normalizeText(b.email);
   if (aEmail && bEmail) {
     return aEmail === bEmail;
   }
-
   const aName = normalizeText(a.name);
   const bName = normalizeText(b.name);
-  if (aName && bName) {
-    return aName === bName;
-  }
-
-  return false;
+  return Boolean(aName && bName && aName === bName);
 };
 
 const isCompletedStatus = (value?: string) => {
@@ -636,30 +205,7 @@ const isCompletedAssignment = (assignment: AssignmentItem) => {
   if (isCompletedStatus(assignment.status)) {
     return true;
   }
-
   return Boolean((assignment.completedDate ?? "").trim());
-};
-
-const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
-  const root = asRecord(payload);
-  const userRoot =
-    asRecord(root?.user) ??
-    asRecord(root?.member) ??
-    asRecord(root?.account) ??
-    asRecord(root?.data) ??
-    root;
-  const user = unwrapEntity(userRoot);
-
-  return {
-    id: pickFromSources(user, userRoot, [
-      "id",
-      "user_id",
-      "userId",
-      "member_id",
-    ]),
-    name: pickFromSources(user, userRoot, ["name", "user_name", "member_name"]),
-    email: pickFromSources(user, userRoot, ["email", "mail", "member_email"]),
-  };
 };
 
 const hasMemberIdentity = (member: MemberItem) => {
@@ -684,21 +230,11 @@ const membershipBelongsToGroup = (
   return Boolean(membershipGroupId && groupId && membershipGroupId === groupId);
 };
 
-const evaluationsDebugEnabled = process.env.EVALUATIONS_DEBUG === "1";
 const evaluationsStrictAssignee =
   process.env.EVALUATIONS_STRICT_ASSIGNEE === "1";
 
-const evaluationsDebugLog = (label: string, payload: unknown) => {
-  if (!evaluationsDebugEnabled) {
-    return;
-  }
-
-  console.info(`[evaluations-debug] ${label}`, payload);
-};
-
 export default async function EvaluationsPage() {
   const session = await auth();
-
   if (!session) {
     redirect("/auth/timeout");
   }
@@ -706,7 +242,6 @@ export default async function EvaluationsPage() {
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
   const isGuestSession = isGuestSessionUser(session.user);
-
   if (!apiUrl || !idToken) {
     throw new Error(
       !apiUrl ? "API_URL is not configured" : "ID token is missing",
@@ -718,9 +253,7 @@ export default async function EvaluationsPage() {
 
   const fetchOkJson = async (url: string): Promise<unknown | null> => {
     const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${idToken}`,
-      },
+      headers: { Authorization: `Bearer ${idToken}` },
       cache: "no-store",
     }).catch(() => null);
 
@@ -728,10 +261,8 @@ export default async function EvaluationsPage() {
       if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
         redirect(GUEST_EXPIRED_REDIRECT_PATH);
       }
-
       return null;
     }
-
     return res.json().catch(() => null);
   };
 
@@ -740,35 +271,32 @@ export default async function EvaluationsPage() {
     (session.user as { userId?: string } | undefined)?.userId;
 
   const [
-    groupsV1,
-    groupsLegacy,
-    membershipsV1,
-    membershipsLegacy,
-    evaluationsV1,
-    evaluationsLegacy,
-    meV1,
-    meLegacy,
+    groupsPayload,
+    membershipsPayload,
+    evaluationsPayload,
+    mePayload,
     meById,
   ] = await Promise.all([
     fetchOkJson(`${v1Base}/groups`),
-    fetchOkJson(`${base}/groups`),
     fetchOkJson(`${v1Base}/memberships`),
-    fetchOkJson(`${base}/memberships`),
     fetchOkJson(`${v1Base}/evaluations`),
-    fetchOkJson(`${base}/evaluations`),
     fetchOkJson(`${v1Base}/users/me`),
-    fetchOkJson(`${base}/users/me`),
     sessionUserId
       ? fetchOkJson(`${v1Base}/users/${encodeURIComponent(sessionUserId)}`)
       : Promise.resolve(null),
   ]);
 
-  const groups = normalizeGroups([
-    groupsV1,
-    groupsLegacy,
-    membershipsV1,
-    membershipsLegacy,
-  ]);
+  const groups = Array.from(
+    new Map(
+      toArray(groupsPayload)
+        .map((row) => normalizeGroup(row))
+        .filter((group) => group.name.trim().length > 0)
+        .map((group) => [
+          group.id ? `id:${group.id}` : `name:${group.name}`,
+          group,
+        ]),
+    ).values(),
+  );
 
   if (groups.length === 0) {
     return (
@@ -794,17 +322,18 @@ export default async function EvaluationsPage() {
     );
   }
 
-  const memberships = normalizeMemberships([membershipsV1, membershipsLegacy]);
+  const memberships = toArray(membershipsPayload).map((row) =>
+    normalizeMembership(row),
+  );
+  const normalizedEvaluations = toArray(evaluationsPayload).map((row) =>
+    normalizeEvaluation(row),
+  );
 
-  const meFromV1 = extractCurrentUserIdentity(meV1);
-  const meFromLegacy = extractCurrentUserIdentity(meLegacy);
+  const meFromV1 = extractCurrentUserIdentity(mePayload);
   const meFromById = extractCurrentUserIdentity(meById);
   const currentUserFromApi = hasMemberIdentity(meFromV1)
     ? meFromV1
-    : hasMemberIdentity(meFromLegacy)
-      ? meFromLegacy
-      : meFromById;
-
+    : meFromById;
   const currentUser: MemberItem = {
     id:
       currentUserFromApi.id ??
@@ -825,43 +354,26 @@ export default async function EvaluationsPage() {
       .map((value) => (typeof value === "string" ? normalizeText(value) : ""))
       .filter((value) => value.length > 0),
   );
-
-  const isEvaluationByMe = (evaluation: EvaluationItem) => {
-    const evaluatorId = normalizeText(evaluation.evaluatorId);
-    if (evaluatorId && selfUserIds.has(evaluatorId)) {
-      return true;
-    }
-
-    const evaluatorEmail = normalizeText(evaluation.evaluatorEmail);
-    if (evaluatorEmail && selfEmails.has(evaluatorEmail)) {
-      return true;
-    }
-
-    return false;
+  const isSelfUserId = (value?: string) => {
+    const normalized = normalizeText(value);
+    return Boolean(normalized && selfUserIds.has(normalized));
   };
-
-  const normalizedEvaluations = [
-    ...extractEvaluationsArray(evaluationsV1),
-    ...extractEvaluationsArray(evaluationsLegacy),
-  ].map((row) => normalizeEvaluation(row));
-
-  const evaluatedAssignmentIdsByMe = new Set(
-    normalizedEvaluations
-      .filter((evaluation) => isEvaluationByMe(evaluation))
-      .map((evaluation) => normalizeText(evaluation.assignmentId))
-      .filter((assignmentId) => assignmentId.length > 0),
-  );
+  const isSelfEmail = (value?: string) => {
+    const normalized = normalizeText(value);
+    return Boolean(normalized && selfEmails.has(normalized));
+  };
 
   const evaluatedAssignmentIds = new Set(
     normalizedEvaluations
       .map((evaluation) => normalizeText(evaluation.assignmentId))
-      .filter((assignmentId) => assignmentId.length > 0),
+      .filter((id) => id.length > 0),
   );
 
-  const evaluatedTaskIds = new Set(
+  const evaluatedTaskIdsWithoutAssignment = new Set(
     normalizedEvaluations
+      .filter((evaluation) => !normalizeText(evaluation.assignmentId))
       .map((evaluation) => normalizeText(evaluation.taskId))
-      .filter((taskId) => taskId.length > 0),
+      .filter((id) => id.length > 0),
   );
 
   const globalMemberByMembershipId = new Map(
@@ -889,22 +401,16 @@ export default async function EvaluationsPage() {
   const groupsWithEvaluations = await Promise.all(
     groups.map(async (group) => {
       if (!group.id) {
-        return {
-          group,
-          rows: [] as Array<{
-            assignment: AssignmentItem;
-            task: TaskItem;
-            assigneeLabel: string;
-          }>,
-        };
+        return { group, rows: [] as GroupRow[] };
       }
 
       const tasksPayload = await fetchOkJson(
         `${v1Base}/groups/${encodeURIComponent(group.id)}/tasks`,
       );
 
-      const tasks = extractTasksArray(tasksPayload).map(normalizeTask);
-
+      const tasks = toArray(tasksPayload).map((row, index) =>
+        normalizeTask(row, index),
+      );
       const uniqueTasks = Array.from(
         new Map(
           tasks.map((task, index) => [
@@ -938,58 +444,34 @@ export default async function EvaluationsPage() {
           row.payload != null,
       );
 
-      const parsedAssignmentsByTask = assignmentPayloadsByTask.flatMap(
+      const parsedAssignments = assignmentPayloadsByTask.flatMap(
         ({ taskId, payload }) => {
-          const extracted = extractAssignmentsArray(payload);
-          const sourceRows = extracted.length > 0 ? extracted : [payload];
-
-          return sourceRows
+          const rows = toArray(payload);
+          return rows
             .map((row) => {
               const normalized = normalizeAssignment(row);
-              return {
-                ...normalized,
-                taskId: normalized.taskId ?? taskId,
-              };
+              return { ...normalized, taskId: normalized.taskId ?? taskId };
             })
-            .filter((assignment) => {
-              return Boolean(
+            .filter((assignment) =>
+              Boolean(
                 assignment.id ||
                 assignment.taskId ||
                 assignment.status ||
                 assignment.completedDate,
-              );
-            });
+              ),
+            );
         },
       );
 
       const uniqueAssignments = Array.from(
         new Map(
-          parsedAssignmentsByTask.map((assignment, index) => [
+          parsedAssignments.map((assignment, index) => [
             normalizeText(assignment.id) ||
               `${normalizeText(assignment.taskId)}:${normalizeText(assignment.assigneeId)}:${index}`,
             assignment,
           ]),
         ).values(),
       );
-
-      evaluationsDebugLog("group-data", {
-        groupId: group.id,
-        groupName: group.name,
-        taskPayloadsCount: tasksPayload ? 1 : 0,
-        assignmentPayloadsCount: assignmentPayloadsByTask.length,
-        tasksCount: uniqueTasks.length,
-        assignmentsCount: uniqueAssignments.length,
-        completedCount: uniqueAssignments.filter((assignment) =>
-          isCompletedAssignment(assignment),
-        ).length,
-        sampleStatuses: uniqueAssignments.slice(0, 10).map((assignment) => ({
-          id: assignment.id,
-          taskId: assignment.taskId,
-          status: assignment.status,
-          completedDate: assignment.completedDate,
-          assigneeId: assignment.assigneeId,
-        })),
-      });
 
       const completedAssignments = uniqueAssignments.filter((assignment) =>
         isCompletedAssignment(assignment),
@@ -1003,12 +485,10 @@ export default async function EvaluationsPage() {
               if (!taskId) {
                 return false;
               }
-
               const existing = taskById.get(normalizeText(taskId));
               if (!existing) {
                 return true;
               }
-
               const normalizedName = normalizeText(existing.name);
               return (
                 normalizedName === "タスク" ||
@@ -1020,32 +500,21 @@ export default async function EvaluationsPage() {
 
       const missingTaskDetails = await Promise.all(
         missingTaskIds.map(async (taskId) => {
-          const detailCandidates = [
+          const detail = await fetchOkJson(
             `${v1Base}/tasks/${encodeURIComponent(taskId)}`,
-          ];
-
-          for (const url of detailCandidates) {
-            const detail = await fetchOkJson(url);
-            if (detail == null) {
-              continue;
-            }
-
-            return {
-              taskId,
-              task: normalizeTaskDetail(detail, taskId),
-            };
+          );
+          if (detail == null) {
+            return null;
           }
-
-          return null;
+          return { taskId, task: normalizeTaskDetail(detail, taskId) };
         }),
       );
 
       const taskByIdWithDetails = new Map(taskById);
       for (const detail of missingTaskDetails) {
-        if (!detail?.taskId) {
-          continue;
+        if (detail?.taskId) {
+          taskByIdWithDetails.set(normalizeText(detail.taskId), detail.task);
         }
-        taskByIdWithDetails.set(normalizeText(detail.taskId), detail.task);
       }
 
       const membershipsInGroup = memberships.filter((membership) =>
@@ -1078,37 +547,20 @@ export default async function EvaluationsPage() {
       );
 
       const rows = completedAssignments
-        .map((assignment) => {
+        .map((assignment): GroupRow | null => {
           const normalizedAssignmentId = normalizeText(assignment.id);
           const normalizedTaskId = normalizeText(assignment.taskId);
-
-          if (normalizedTaskId && evaluatedTaskIds.has(normalizedTaskId)) {
-            return null;
-          }
-
-          if (
-            normalizedAssignmentId &&
-            evaluatedAssignmentIds.has(normalizedAssignmentId)
-          ) {
-            return null;
-          }
-
-          if (
-            normalizedAssignmentId &&
-            evaluatedAssignmentIdsByMe.has(normalizedAssignmentId)
-          ) {
-            return null;
-          }
-
-          const completedByUserId = normalizeText(assignment.completedByUserId);
-          if (completedByUserId && selfUserIds.has(completedByUserId)) {
-            return null;
-          }
-
           const assignmentMembershipId = normalizeText(assignment.membershipId);
+
           if (
-            assignmentMembershipId &&
-            myMembershipIds.has(assignmentMembershipId)
+            (!normalizedAssignmentId &&
+              normalizedTaskId &&
+              evaluatedTaskIdsWithoutAssignment.has(normalizedTaskId)) ||
+            (normalizedAssignmentId &&
+              evaluatedAssignmentIds.has(normalizedAssignmentId)) ||
+            isSelfUserId(assignment.completedByUserId) ||
+            (assignmentMembershipId &&
+              myMembershipIds.has(assignmentMembershipId))
           ) {
             return null;
           }
@@ -1121,6 +573,7 @@ export default async function EvaluationsPage() {
                 normalizeText(assignment.membershipId),
               ))
             : undefined;
+
           const memberFromAssigneeId = assignment.assigneeId
             ? (memberByUserId.get(normalizeText(assignment.assigneeId)) ??
               globalMemberByUserId.get(normalizeText(assignment.assigneeId)))
@@ -1141,45 +594,18 @@ export default async function EvaluationsPage() {
               memberFromAssigneeId?.email,
           };
 
-          if (evaluationsStrictAssignee && !hasMemberIdentity(assignee)) {
-            return null;
-          }
-
-          if (
-            hasMemberIdentity(assignee) &&
-            isSameMember(assignee, currentUser)
-          ) {
-            return null;
-          }
-
           const normalizedAssigneeId = normalizeText(assignment.assigneeId);
           if (
-            normalizedCurrentUserId &&
-            normalizedAssigneeId &&
-            normalizedCurrentUserId === normalizedAssigneeId
-          ) {
-            return null;
-          }
-
-          if (
-            assignmentMembershipId &&
-            myMembershipIdsGlobal.has(assignmentMembershipId)
-          ) {
-            return null;
-          }
-
-          const normalizedResolvedAssigneeId = normalizeText(assignee.id);
-          if (
-            normalizedResolvedAssigneeId &&
-            selfUserIds.has(normalizedResolvedAssigneeId)
-          ) {
-            return null;
-          }
-
-          const normalizedResolvedAssigneeEmail = normalizeText(assignee.email);
-          if (
-            normalizedResolvedAssigneeEmail &&
-            selfEmails.has(normalizedResolvedAssigneeEmail)
+            (evaluationsStrictAssignee && !hasMemberIdentity(assignee)) ||
+            (hasMemberIdentity(assignee) &&
+              isSameMember(assignee, currentUser)) ||
+            (normalizedCurrentUserId &&
+              normalizedAssigneeId &&
+              normalizedCurrentUserId === normalizedAssigneeId) ||
+            (assignmentMembershipId &&
+              myMembershipIdsGlobal.has(assignmentMembershipId)) ||
+            isSelfUserId(assignee.id) ||
+            isSelfEmail(assignee.email)
           ) {
             return null;
           }
@@ -1193,19 +619,11 @@ export default async function EvaluationsPage() {
             description: assignment.taskDescription ?? "-",
           };
 
-          return {
-            assignment,
-            task,
-            assigneeLabel:
-              assignee.name ?? assignee.email ?? assignee.id ?? "他のユーザ",
-          };
+          return { assignment, task };
         })
-        .filter((row): row is NonNullable<typeof row> => row !== null);
+        .filter((row): row is GroupRow => row !== null);
 
-      return {
-        group,
-        rows: shuffleArray(rows),
-      };
+      return { group, rows: shuffleArray(rows) };
     }),
   );
 
@@ -1219,11 +637,9 @@ export default async function EvaluationsPage() {
       <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
         <h1 className="text-2xl font-extrabold">評価</h1>
       </div>
-
       <p className="mt-6 text-sm text-slate-600 dark:text-slate-300">
         他ユーザが完了したタスクは {totalRows} 件です。
       </p>
-
       <div className="not-prose mt-8 space-y-6">
         {groupsWithEvaluations.map(({ group, rows }) => (
           <section
@@ -1236,7 +652,6 @@ export default async function EvaluationsPage() {
                 {rows.length} 件
               </span>
             </div>
-
             {rows.length === 0 ? (
               <p className="text-sm text-slate-500">
                 評価できる完了タスクはありません。
@@ -1249,13 +664,11 @@ export default async function EvaluationsPage() {
                       <th className="px-3 py-2 font-semibold">家事</th>
                       <th className="px-3 py-2 font-semibold">負担ポイント</th>
                       <th className="px-3 py-2 font-semibold">備考</th>
-                      <th className="px-3 py-2 font-semibold">実施者</th>
-                      <th className="px-3 py-2 font-semibold">進捗状況</th>
                       <th className="px-3 py-2 font-semibold">評価</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(({ assignment, task, assigneeLabel }, index) => (
+                    {rows.map(({ assignment, task }, index) => (
                       <tr
                         key={
                           assignment.id ?? `${group.id ?? group.name}-${index}`
@@ -1269,12 +682,6 @@ export default async function EvaluationsPage() {
                         </td>
                         <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
                           {task.description ?? "-"}
-                        </td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                          {assigneeLabel}
-                        </td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                          完了
                         </td>
                         <td className="px-3 py-2">
                           <AssignmentEvaluationForm

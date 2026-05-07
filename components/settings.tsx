@@ -148,7 +148,7 @@ const unwrapNotificationRow = (
       ...notification,
       ...notificationAttributes,
       id:
-        notification.id ??
+        notification?.id ??
         (typeof root.id === "string" || typeof root.id === "number"
           ? root.id
           : undefined),
@@ -162,7 +162,7 @@ const unwrapNotificationRow = (
       ...rowData,
       ...rowDataAttributes,
       id:
-        rowData.id ??
+        rowData?.id ??
         (typeof root.id === "string" || typeof root.id === "number"
           ? root.id
           : undefined),
@@ -342,7 +342,7 @@ export default function UserButton() {
     });
 
     try {
-      const res = await fetch(`/api/v1/notifications?${params.toString()}`, {
+      const res = await fetch(`/api/notifications?${params.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
       }).catch((error) => {
