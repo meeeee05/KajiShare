@@ -119,23 +119,6 @@ const extractViewerUserId = (payload: unknown): string => {
   return "";
 };
 
-const extractLatestTaskAssignedEventId = (payload: unknown): string => {
-  const root = asRecord(payload);
-  const data = asRecord(root?.data);
-
-  const candidate =
-    data?.latest_task_assigned_event_id ?? data?.latestTaskAssignedEventId;
-
-  if (typeof candidate === "string" && candidate.trim()) {
-    return candidate.trim();
-  }
-  if (typeof candidate === "number") {
-    return String(candidate);
-  }
-
-  return "";
-};
-
 const unwrapNotificationRow = (
   row: unknown,
 ): Record<string, unknown> | null => {
@@ -440,7 +423,6 @@ export default function NotificationsPage() {
   const activeUserRef = useRef(currentUserId);
   const abortRef = useRef<AbortController | null>(null);
   const notificationsRef = useRef<NotificationItem[]>([]);
-  const sinceIdRef = useRef<string | null>(null);
   const inFlightCountRef = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
@@ -452,12 +434,8 @@ export default function NotificationsPage() {
 
     try {
       const params = new URLSearchParams({
-        type: "task_assigned",
         limit: String(limit),
       });
-      if (sinceIdRef.current != null) {
-        params.set("since_id", sinceIdRef.current);
-      }
       if (debugMode) {
         params.set("debug", "1");
       }
@@ -515,16 +493,9 @@ export default function NotificationsPage() {
       );
       notificationsRef.current = merged;
 
-      const latestTaskAssignedEventId =
-        extractLatestTaskAssignedEventId(backendPayload);
-      if (latestTaskAssignedEventId) {
-        sinceIdRef.current = latestTaskAssignedEventId;
-      }
-
       console.log("[notifications-debug]", {
         currentUserId: requestUser,
         viewer_user_id: viewerUserId || "(none)",
-        since_id: sinceIdRef.current,
         "raw.notifications.length": rawSummary.rawCount,
         "raw.missing_id_count": rawSummary.missingIdCount,
         "raw.task_assigned_count": rawSummary.taskAssignedRawCount,
@@ -575,7 +546,6 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     activeUserRef.current = currentUserId;
-    sinceIdRef.current = null;
     notificationsRef.current = [];
     setNotifications([]);
     setLoading(true);

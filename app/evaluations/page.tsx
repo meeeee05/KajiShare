@@ -8,6 +8,7 @@ import {
   isGuestSessionUser,
 } from "@/lib/guest-session";
 
+// 型定義
 type AnyRecord = Record<string, unknown>;
 type GroupItem = { id?: string; name: string };
 type MemberItem = { id?: string; name?: string; email?: string };
@@ -28,10 +29,7 @@ type AssignmentItem = {
   membershipId?: string;
   status?: string;
   completedDate?: string;
-  completedByUserId?: string;
   assigneeId?: string;
-  assigneeName?: string;
-  assigneeEmail?: string;
 };
 type EvaluationItem = {
   assignmentId?: string;
@@ -40,8 +38,10 @@ type EvaluationItem = {
 };
 type GroupRow = { assignment: AssignmentItem; task: TaskItem };
 
+// 文字列を正規化
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
+// 利用可否判定
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -68,6 +68,7 @@ const pickFirstString = (
   return undefined;
 };
 
+// アカウント削除処理
 const getEntity = (value: unknown) => {
   const entity = asRecord(value);
   const attributes = asRecord(entity?.attributes);
@@ -87,6 +88,7 @@ const pickRelationshipId = (value: unknown, key: string) => {
   return pickFirstString(data, ["id"]);
 };
 
+// APIリクエスト前のゲストセッション期限切れチェック
 const toArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
@@ -103,6 +105,7 @@ const normalizeGroup = (row: unknown): GroupItem => ({
   name: pickFromEntity(row, ["name"]) ?? "",
 });
 
+// APIレスポンスの正規化
 const normalizeMembership = (row: unknown): MembershipItem => ({
   id: pickFromEntity(row, ["id"]),
   groupId: pickFromEntity(row, ["group_id"]),
@@ -113,26 +116,13 @@ const normalizeMembership = (row: unknown): MembershipItem => ({
   },
 });
 
+// 評価登録
 const normalizeTask = (row: unknown, index: number): TaskItem => ({
   id: pickFromEntity(row, ["id"]),
   name: pickFromEntity(row, ["name"]) ?? `タスク ${index + 1}`,
   point: pickFromEntity(row, ["point"]),
   description: pickFromEntity(row, ["description"]),
 });
-
-const normalizeTaskDetail = (
-  payload: unknown,
-  fallbackTaskId?: string,
-): TaskItem => {
-  const root = asRecord(payload);
-  const row = asRecord(root?.data) ?? root;
-  return {
-    id: pickFromEntity(row, ["id"]) ?? fallbackTaskId,
-    name: pickFromEntity(row, ["name"]) ?? "タスク",
-    point: pickFromEntity(row, ["point"]),
-    description: pickFromEntity(row, ["description"]),
-  };
-};
 
 const normalizeAssignment = (row: unknown): AssignmentItem => ({
   id: pickFromEntity(row, ["id"]),
@@ -146,10 +136,7 @@ const normalizeAssignment = (row: unknown): AssignmentItem => ({
     pickRelationshipId(row, "membership"),
   status: pickFromEntity(row, ["status"]),
   completedDate: pickFromEntity(row, ["completed_date"]),
-  completedByUserId: pickFromEntity(row, ["completed_by_user_id"]),
   assigneeId: pickFromEntity(row, ["assigned_to_id"]),
-  assigneeName: pickFromEntity(row, ["assigned_to_name"]),
-  assigneeEmail: pickFromEntity(row, ["assigned_to_email"]),
 });
 
 const normalizeEvaluation = (row: unknown): EvaluationItem => ({
@@ -172,6 +159,7 @@ const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
   };
 };
 
+// メンバーが同じでないか判定
 const isSameMember = (a: MemberItem, b: MemberItem) => {
   const aId = normalizeText(a.id);
   const bId = normalizeText(b.id);
@@ -188,17 +176,10 @@ const isSameMember = (a: MemberItem, b: MemberItem) => {
   return Boolean(aName && bName && aName === bName);
 };
 
+// タスク完了とみなすステータスか判定
 const isCompletedStatus = (value?: string) => {
   const normalized = normalizeText(value);
-  return (
-    normalized === "completed" ||
-    normalized === "complete" ||
-    normalized === "完了済み" ||
-    normalized === "済" ||
-    normalized === "done" ||
-    normalized === "finished" ||
-    normalized === "完了"
-  );
+  return normalized === "completed";
 };
 
 const isCompletedAssignment = (assignment: AssignmentItem) => {
@@ -212,6 +193,7 @@ const hasMemberIdentity = (member: MemberItem) => {
   return Boolean(member.id || member.email || member.name);
 };
 
+//　配列をシャッフル(評価対象はランダムに表示)
 const shuffleArray = <T,>(items: T[]): T[] => {
   const result = [...items];
   for (let i = result.length - 1; i > 0; i -= 1) {
@@ -221,6 +203,7 @@ const shuffleArray = <T,>(items: T[]): T[] => {
   return result;
 };
 
+// グループに所属しているか判定
 const membershipBelongsToGroup = (
   membership: MembershipItem,
   group: GroupItem,
@@ -230,9 +213,7 @@ const membershipBelongsToGroup = (
   return Boolean(membershipGroupId && groupId && membershipGroupId === groupId);
 };
 
-const evaluationsStrictAssignee =
-  process.env.EVALUATIONS_STRICT_ASSIGNEE === "1";
-
+// APIリクエスト前のゲストセッション期限切れチェック
 export default async function EvaluationsPage() {
   const session = await auth();
   if (!session) {
@@ -251,6 +232,7 @@ export default async function EvaluationsPage() {
   const base = apiUrl.replace(/\/+$/, "");
   const v1Base = base.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
+  // APIリクエスト（認証情報付き）
   const fetchOkJson = async (url: string): Promise<unknown | null> => {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${idToken}` },
@@ -266,25 +248,14 @@ export default async function EvaluationsPage() {
     return res.json().catch(() => null);
   };
 
-  const sessionUserId =
-    (session.user as { id?: string } | undefined)?.id ??
-    (session.user as { userId?: string } | undefined)?.userId;
-
-  const [
-    groupsPayload,
-    membershipsPayload,
-    evaluationsPayload,
-    mePayload,
-    meById,
-  ] = await Promise.all([
-    fetchOkJson(`${v1Base}/groups`),
-    fetchOkJson(`${v1Base}/memberships`),
-    fetchOkJson(`${v1Base}/evaluations`),
-    fetchOkJson(`${v1Base}/users/me`),
-    sessionUserId
-      ? fetchOkJson(`${v1Base}/users/${encodeURIComponent(sessionUserId)}`)
-      : Promise.resolve(null),
-  ]);
+  // グループ、権限、評価、ユーザ情報の取得
+  const [groupsPayload, membershipsPayload, evaluationsPayload, mePayload] =
+    await Promise.all([
+      fetchOkJson(`${v1Base}/groups`),
+      fetchOkJson(`${v1Base}/memberships`),
+      fetchOkJson(`${v1Base}/evaluations`),
+      fetchOkJson(`${v1Base}/users/me`),
+    ]);
 
   const groups = Array.from(
     new Map(
@@ -298,6 +269,7 @@ export default async function EvaluationsPage() {
     ).values(),
   );
 
+  // グループがない場合
   if (groups.length === 0) {
     return (
       <div className="prose max-w-none p-4 sm:p-6">
@@ -322,6 +294,7 @@ export default async function EvaluationsPage() {
     );
   }
 
+  // グループごとの評価対象タスクの取得と評価登録フォームの表示
   const memberships = toArray(membershipsPayload).map((row) =>
     normalizeMembership(row),
   );
@@ -329,46 +302,31 @@ export default async function EvaluationsPage() {
     normalizeEvaluation(row),
   );
 
-  const meFromV1 = extractCurrentUserIdentity(mePayload);
-  const meFromById = extractCurrentUserIdentity(meById);
-  const currentUserFromApi = hasMemberIdentity(meFromV1)
-    ? meFromV1
-    : meFromById;
+  // 評価対象から自分自身を除外
+  const apiUser = extractCurrentUserIdentity(mePayload);
+  const su = session.user as {
+    id?: string;
+    userId?: string;
+    name?: string | null;
+    email?: string | null;
+  };
   const currentUser: MemberItem = {
     id:
-      currentUserFromApi.id ??
-      (session.user as { id?: string } | undefined)?.id ??
-      (session.user as { userId?: string } | undefined)?.userId,
-    name: currentUserFromApi.name ?? session.user?.name ?? undefined,
-    email: currentUserFromApi.email ?? session.user?.email ?? undefined,
+      apiUser.id ??
+      su.id ??
+      su.userId,
+    name: apiUser.name ?? su.name ?? undefined,
+    email: apiUser.email ?? su.email ?? undefined,
   };
 
-  const normalizedCurrentUserId = normalizeText(currentUser.id);
-  const selfUserIds = new Set(
-    [currentUser.id, sessionUserId]
-      .map((value) => normalizeText(value))
-      .filter((value) => value.length > 0),
-  );
-  const selfEmails = new Set(
-    [currentUser.email, session.user?.email]
-      .map((value) => (typeof value === "string" ? normalizeText(value) : ""))
-      .filter((value) => value.length > 0),
-  );
-  const isSelfUserId = (value?: string) => {
-    const normalized = normalizeText(value);
-    return Boolean(normalized && selfUserIds.has(normalized));
-  };
-  const isSelfEmail = (value?: string) => {
-    const normalized = normalizeText(value);
-    return Boolean(normalized && selfEmails.has(normalized));
-  };
-
+  // 評価の重複排除
   const evaluatedAssignmentIds = new Set(
     normalizedEvaluations
       .map((evaluation) => normalizeText(evaluation.assignmentId))
       .filter((id) => id.length > 0),
   );
 
+  // 評価済み判定
   const evaluatedTaskIdsWithoutAssignment = new Set(
     normalizedEvaluations
       .filter((evaluation) => !normalizeText(evaluation.assignmentId))
@@ -376,34 +334,14 @@ export default async function EvaluationsPage() {
       .filter((id) => id.length > 0),
   );
 
-  const globalMemberByMembershipId = new Map(
-    memberships
-      .filter((membership) => membership.id)
-      .map((membership) => [normalizeText(membership.id), membership.member]),
-  );
-
-  const globalMemberByUserId = new Map(
-    memberships
-      .filter((membership) => membership.member.id)
-      .map((membership) => [
-        normalizeText(membership.member.id),
-        membership.member,
-      ]),
-  );
-
-  const myMembershipIdsGlobal = new Set(
-    memberships
-      .filter((membership) => isSameMember(membership.member, currentUser))
-      .map((membership) => normalizeText(membership.id))
-      .filter((id) => id.length > 0),
-  );
-
+  //　グループごとに評価対象タスクを取得
   const groupsWithEvaluations = await Promise.all(
     groups.map(async (group) => {
       if (!group.id) {
         return { group, rows: [] as GroupRow[] };
       }
 
+      // グループに所属しているか判定
       const tasksPayload = await fetchOkJson(
         `${v1Base}/groups/${encodeURIComponent(group.id)}/tasks`,
       );
@@ -420,6 +358,7 @@ export default async function EvaluationsPage() {
         ).values(),
       );
 
+      // タスクに紐づくアサインメントを取得
       const taskById = new Map(
         uniqueTasks
           .filter((task) => task.id)
@@ -444,6 +383,7 @@ export default async function EvaluationsPage() {
           row.payload != null,
       );
 
+      // 評価対象を選別
       const parsedAssignments = assignmentPayloadsByTask.flatMap(
         ({ taskId, payload }) => {
           const rows = toArray(payload);
@@ -463,6 +403,7 @@ export default async function EvaluationsPage() {
         },
       );
 
+      // statusが完了のタスクを選別
       const uniqueAssignments = Array.from(
         new Map(
           parsedAssignments.map((assignment, index) => [
@@ -473,54 +414,16 @@ export default async function EvaluationsPage() {
         ).values(),
       );
 
+      // タスクのstatusを選別
       const completedAssignments = uniqueAssignments.filter((assignment) =>
         isCompletedAssignment(assignment),
       );
-
-      const missingTaskIds = Array.from(
-        new Set(
-          completedAssignments
-            .map((assignment) => assignment.taskId)
-            .filter((taskId): taskId is string => {
-              if (!taskId) {
-                return false;
-              }
-              const existing = taskById.get(normalizeText(taskId));
-              if (!existing) {
-                return true;
-              }
-              const normalizedName = normalizeText(existing.name);
-              return (
-                normalizedName === "タスク" ||
-                normalizedName.startsWith("タスク ")
-              );
-            }),
-        ),
-      );
-
-      const missingTaskDetails = await Promise.all(
-        missingTaskIds.map(async (taskId) => {
-          const detail = await fetchOkJson(
-            `${v1Base}/tasks/${encodeURIComponent(taskId)}`,
-          );
-          if (detail == null) {
-            return null;
-          }
-          return { taskId, task: normalizeTaskDetail(detail, taskId) };
-        }),
-      );
-
-      const taskByIdWithDetails = new Map(taskById);
-      for (const detail of missingTaskDetails) {
-        if (detail?.taskId) {
-          taskByIdWithDetails.set(normalizeText(detail.taskId), detail.task);
-        }
-      }
 
       const membershipsInGroup = memberships.filter((membership) =>
         membershipBelongsToGroup(membership, group),
       );
 
+      // アサインメントの担当者がグループに所属しているか判定
       const memberByMembershipId = new Map(
         membershipsInGroup
           .filter((membership) => membership.id)
@@ -530,15 +433,7 @@ export default async function EvaluationsPage() {
           ]),
       );
 
-      const memberByUserId = new Map(
-        membershipsInGroup
-          .filter((membership) => membership.member.id)
-          .map((membership) => [
-            normalizeText(membership.member.id),
-            membership.member,
-          ]),
-      );
-
+      // 自分が担当のタスクを評価対象から除外するためのIDセット
       const myMembershipIds = new Set(
         membershipsInGroup
           .filter((membership) => isSameMember(membership.member, currentUser))
@@ -558,61 +453,23 @@ export default async function EvaluationsPage() {
               evaluatedTaskIdsWithoutAssignment.has(normalizedTaskId)) ||
             (normalizedAssignmentId &&
               evaluatedAssignmentIds.has(normalizedAssignmentId)) ||
-            isSelfUserId(assignment.completedByUserId) ||
             (assignmentMembershipId &&
               myMembershipIds.has(assignmentMembershipId))
           ) {
             return null;
           }
 
+          // タスクの担当者がグループに所属していない場合は評価対象外とする
           const memberFromMembership = assignment.membershipId
-            ? (memberByMembershipId.get(
-                normalizeText(assignment.membershipId),
-              ) ??
-              globalMemberByMembershipId.get(
-                normalizeText(assignment.membershipId),
-              ))
+            ? memberByMembershipId.get(normalizeText(assignment.membershipId))
             : undefined;
 
-          const memberFromAssigneeId = assignment.assigneeId
-            ? (memberByUserId.get(normalizeText(assignment.assigneeId)) ??
-              globalMemberByUserId.get(normalizeText(assignment.assigneeId)))
-            : undefined;
-
-          const assignee: MemberItem = {
-            id:
-              assignment.assigneeId ??
-              memberFromMembership?.id ??
-              memberFromAssigneeId?.id,
-            name:
-              assignment.assigneeName ??
-              memberFromMembership?.name ??
-              memberFromAssigneeId?.name,
-            email:
-              assignment.assigneeEmail ??
-              memberFromMembership?.email ??
-              memberFromAssigneeId?.email,
-          };
-
-          const normalizedAssigneeId = normalizeText(assignment.assigneeId);
-          if (
-            (evaluationsStrictAssignee && !hasMemberIdentity(assignee)) ||
-            (hasMemberIdentity(assignee) &&
-              isSameMember(assignee, currentUser)) ||
-            (normalizedCurrentUserId &&
-              normalizedAssigneeId &&
-              normalizedCurrentUserId === normalizedAssigneeId) ||
-            (assignmentMembershipId &&
-              myMembershipIdsGlobal.has(assignmentMembershipId)) ||
-            isSelfUserId(assignee.id) ||
-            isSelfEmail(assignee.email)
-          ) {
+          if (!hasMemberIdentity(memberFromMembership ?? {})) {
             return null;
           }
 
-          const task = taskByIdWithDetails.get(
-            normalizeText(assignment.taskId),
-          ) ?? {
+          // タスクが存在しない場合は表示しない
+          const task = taskById.get(normalizeText(assignment.taskId)) ?? {
             id: assignment.taskId,
             name: assignment.taskName ?? "タスク",
             point: assignment.taskPoint ?? "-",
@@ -627,6 +484,7 @@ export default async function EvaluationsPage() {
     }),
   );
 
+  // 評価対象がない場合
   const totalRows = groupsWithEvaluations.reduce(
     (sum, group) => sum + group.rows.length,
     0,

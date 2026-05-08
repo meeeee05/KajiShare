@@ -241,23 +241,6 @@ const extractLatestNotificationMeta = (
   return latest;
 };
 
-const extractLatestTaskAssignedEventId = (payload: unknown): string => {
-  const root = asRecord(payload);
-  const data = asRecord(root?.data);
-
-  const candidate =
-    data?.latest_task_assigned_event_id ?? data?.latestTaskAssignedEventId;
-
-  if (typeof candidate === "string" && candidate.trim()) {
-    return candidate.trim();
-  }
-  if (typeof candidate === "number") {
-    return String(candidate);
-  }
-
-  return "";
-};
-
 export default function UserButton() {
   // クライアント側でセッション取得
   const { data: session, status } = useSession();
@@ -275,7 +258,6 @@ export default function UserButton() {
   );
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const sinceIdRef = useRef<string | null>(null);
   const inFlightCountRef = useRef(0);
 
   const seenKey = useMemo(
@@ -326,14 +308,10 @@ export default function UserButton() {
     }
 
     const params = new URLSearchParams({
-      type: "task_assigned",
       limit: String(NOTIFICATIONS_LIMIT),
     });
     if (pathname === "/records") {
       params.set("for_records", "true");
-    }
-    if (sinceIdRef.current != null) {
-      params.set("since_id", sinceIdRef.current);
     }
 
     inFlightCountRef.current += 1;
@@ -369,12 +347,6 @@ export default function UserButton() {
         (session?.user as { id?: string } | undefined)?.id ?? "";
       if (viewerUserId && sessionUserId && viewerUserId !== sessionUserId) {
         return;
-      }
-
-      const latestTaskAssignedEventId =
-        extractLatestTaskAssignedEventId(payload);
-      if (latestTaskAssignedEventId) {
-        sinceIdRef.current = latestTaskAssignedEventId;
       }
 
       if (seq !== requestSeqRef.current) {
@@ -451,7 +423,6 @@ export default function UserButton() {
     setHasNewNotification(false);
     setLatestOccurredAt(null);
     setLatestFingerprint(null);
-    sinceIdRef.current = null;
   }, [pathname, seenKey, seenFingerprintKey]);
 
   useEffect(() => {
