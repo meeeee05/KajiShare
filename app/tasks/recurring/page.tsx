@@ -8,16 +8,21 @@ import {
   isGuestSessionUser,
 } from "@/lib/guest-session";
 
+// 型定義
 type AnyRecord = Record<string, unknown>;
 
 type GroupItem = {
   id?: string;
   name: string;
-  createdById?: string;
-  creatorId?: string;
-  creatorEmail?: string;
 };
 
+type MembershipItem = {
+  groupId?: string;
+  userId?: string;
+  role?: string;
+};
+
+// nullでないか
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -25,8 +30,10 @@ const asRecord = (value: unknown): AnyRecord | null => {
   return value as AnyRecord;
 };
 
+// 比較用に文字列を正規化
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
+// 最初に見つかった文字列値を取り出す
 const pickFirstString = (
   obj: AnyRecord | null,
   keys: string[],
@@ -48,94 +55,54 @@ const pickFirstString = (
   return undefined;
 };
 
-const firstArray = (...values: unknown[]): unknown[] => {
-  for (const value of values) {
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
-  return [];
-};
-
-const extractGroupsArray = (payload: unknown): unknown[] => {
+// APIレスポンスから配列を取り出す
+const dataArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
   }
 
   const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.groups,
-    root.memberships,
-    root.data,
-    root.items,
-    root.results,
-    rootData?.groups,
-    rootData?.memberships,
-    rootData?.items,
-    rootData?.results,
-    rootDataData?.groups,
-    rootDataData?.memberships,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
+  return Array.isArray(root?.data) ? root.data : [];
 };
 
-const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
-  const map = new Map<string, GroupItem>();
+// JSON:API resource の attributes を取り出す
+const unwrapEntity = (value: AnyRecord | null) =>
+  asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
 
-  const put = (group: GroupItem) => {
-    const key = group.id ? `id:${group.id}` : `name:${group.name}`;
-    const existing = map.get(key);
-    if (!existing) {
-      map.set(key, group);
-      return;
-    }
-
-    map.set(key, {
-      ...existing,
-      ...group,
-      createdById: existing.createdById ?? group.createdById,
-      creatorId: existing.creatorId ?? group.creatorId,
-      creatorEmail: existing.creatorEmail ?? group.creatorEmail,
-    });
-  };
-
-  for (const payload of payloads) {
-    const rows = extractGroupsArray(payload);
-    for (const row of rows) {
-      const root = asRecord(row);
-      const membershipGroup = asRecord(root?.group);
-      const item = membershipGroup ?? root;
-      const creator = asRecord(item?.creator) ?? asRecord(root?.creator);
-
-      const id = pickFirstString(item, ["id", "group_id", "groupId"]);
-      const name = pickFirstString(item, ["name"]);
-      const createdById = pickFirstString(item, [
-        "created_by_id",
-        "createdById",
-        "creator_id",
-        "creatorId",
-      ]);
-      const creatorId = pickFirstString(creator, ["id", "user_id", "userId"]);
-      const creatorEmail = pickFirstString(creator, ["email", "mail"]);
-
-      if (!name) {
-        continue;
-      }
-
-      put({ id, name, createdById, creatorId, creatorEmail });
-    }
-  }
-
-  return Array.from(map.values());
+// JSON:API relationship の id を取り出す
+const pickRelationshipId = (row: unknown, key: string) => {
+  const resource = asRecord(row);
+  const relationships = asRecord(resource?.relationships);
+  const relationship = asRecord(relationships?.[key]);
+  const data = asRecord(relationship?.data);
+  return pickFirstString(data, ["id"]);
 };
+
+// グループ一覧の正規化
+const normalizeGroups = (payload: unknown): GroupItem[] =>
+  dataArray(payload).flatMap((row) => {
+    const group = asRecord(row);
+    const name = pickFirstString(group, ["name"]);
+    return name
+      ? [
+          {
+            id: pickFirstString(group, ["id"]),
+            name,
+          },
+        ]
+      : [];
+  });
+
+// メンバーシップ一覧の正規化
+const normalizeMemberships = (payload: unknown): MembershipItem[] =>
+  dataArray(payload).map((row) => {
+    const membership = unwrapEntity(asRecord(row));
+    return {
+      groupId: pickFirstString(membership, ["group_id"]),
+      userId: pickRelationshipId(row, "user"),
+      role: pickFirstString(membership, ["role"]),
+    };
+  });
 
 export default async function RecurringTasksPage({
   searchParams,
@@ -151,8 +118,9 @@ export default async function RecurringTasksPage({
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
   const isGuestSession = isGuestSessionUser(session.user);
-  const currentUserId = (session.user as { id?: string } | undefined)?.id;
-  const currentUserEmail = session.user?.email ?? undefined;
+  const currentUserId =
+    (session.user as { id?: string } | undefined)?.id ??
+    (session.user as { userId?: string } | undefined)?.userId;
 
   if (!apiUrl || !idToken) {
     throw new Error(
@@ -183,20 +151,24 @@ export default async function RecurringTasksPage({
     return res.json().catch(() => null);
   };
 
-  const [groupsV1, groupsLegacy, membershipsV1, membershipsLegacy] =
-    await Promise.all([
-      fetchOkJson(`${v1Base}/groups`),
-      fetchOkJson(`${base}/groups`),
-      fetchOkJson(`${v1Base}/memberships`),
-      fetchOkJson(`${base}/memberships`),
-    ]);
-
-  const groups = normalizeGroups([
-    groupsV1,
-    groupsLegacy,
-    membershipsV1,
-    membershipsLegacy,
+  const [groupsPayload, membershipsPayload] = await Promise.all([
+    fetchOkJson(`${v1Base}/groups`),
+    fetchOkJson(`${v1Base}/memberships`),
   ]);
+
+  const groups = normalizeGroups(groupsPayload);
+  const meId = normalizeText(currentUserId);
+  const adminGroupIds = new Set(
+    normalizeMemberships(membershipsPayload)
+      .filter(
+        (membership) =>
+          membership.role === "admin" &&
+          meId.length > 0 &&
+          normalizeText(membership.userId) === meId,
+      )
+      .map((membership) => normalizeText(membership.groupId))
+      .filter((groupId) => groupId.length > 0),
+  );
 
   const sortedGroups = [...groups].sort((a, b) => {
     if (
@@ -240,22 +212,7 @@ export default async function RecurringTasksPage({
       ) : (
         <div className="not-prose mt-6 space-y-5">
           {sortedGroups.map((group) => {
-            const ownerIds = [group.createdById, group.creatorId]
-              .map((value) => normalizeText(value))
-              .filter((value) => value.length > 0);
-            const ownerEmail = normalizeText(group.creatorEmail);
-            const meId = normalizeText(currentUserId);
-            const meEmail = normalizeText(currentUserEmail);
-            const hasOwnerSignal = ownerIds.length > 0 || ownerEmail.length > 0;
-
-            const canManage =
-              !hasOwnerSignal ||
-              (ownerIds.length > 0 &&
-                meId.length > 0 &&
-                ownerIds.includes(meId)) ||
-              (ownerEmail.length > 0 &&
-                meEmail.length > 0 &&
-                ownerEmail === meEmail);
+            const canManage = adminGroupIds.has(normalizeText(group.id));
 
             return (
               <section

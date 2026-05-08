@@ -1,13 +1,12 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { GUEST_EXPIRED_MESSAGE } from "@/lib/guest-session";
 import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
+// 型定義
 type NotificationType = "member_joined" | "task_assigned" | "task_evaluated";
-
 type NotificationItem = {
   id: string;
   type: string;
@@ -17,7 +16,6 @@ type NotificationItem = {
   taskId: string;
   occurredAt: string;
 };
-
 type DebugEnvelope = {
   debug?: {
     request?: {
@@ -35,199 +33,11 @@ type DebugEnvelope = {
 
 const NOTIFICATIONS_LIMIT = 100;
 
-const parseOccurredAtMs = (raw: string): number => {
-  const direct = Date.parse(raw);
-  if (Number.isFinite(direct)) {
-    return direct;
-  }
-
-  const trimmed = raw.trim();
-  const match = trimmed.match(
-    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?(?:\s*(Z|[+-]\d{2}:?\d{2}))?$/,
-  );
-
-  if (!match) {
-    return Number.NaN;
-  }
-
-  const [, y, m, d, hh, mm, ssRaw, msRaw, tzRaw] = match;
-  const ss = ssRaw ?? "00";
-  const ms = msRaw ? msRaw.slice(0, 3).padEnd(3, "0") : "000";
-
-  if (tzRaw) {
-    const tz =
-      tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
-    return Date.parse(`${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${tz}`);
-  }
-
-  return new Date(
-    Number(y),
-    Number(m) - 1,
-    Number(d),
-    Number(hh),
-    Number(mm),
-    Number(ss),
-    Number(ms),
-  ).getTime();
-};
-
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
-};
-
-const unwrapDebugPayload = (payload: unknown): unknown => {
-  const root = asRecord(payload);
-  if (!root) {
-    return payload;
-  }
-
-  if ("debug" in root && "data" in root) {
-    return root.data;
-  }
-
-  return payload;
-};
-
-const extractDataNotifications = (payload: unknown): unknown[] => {
-  const root = asRecord(payload);
-  const data = asRecord(root?.data);
-  const list = data?.notifications;
-  return Array.isArray(list) ? list : [];
-};
-
-const extractViewerUserId = (payload: unknown): string => {
-  const root = asRecord(payload);
-  const data = asRecord(root?.data);
-
-  const candidate =
-    data?.viewer_user_id ??
-    data?.viewerUserId ??
-    root?.viewer_user_id ??
-    root?.viewerUserId;
-
-  if (typeof candidate === "string") {
-    return candidate;
-  }
-  if (typeof candidate === "number") {
-    return String(candidate);
-  }
-
-  return "";
-};
-
-const unwrapNotificationRow = (
-  row: unknown,
-): Record<string, unknown> | null => {
-  const root = asRecord(row);
-  if (!root) {
-    return null;
-  }
-
-  const rootAttributes = asRecord(root.attributes);
-  if (rootAttributes) {
-    return {
-      ...root,
-      ...rootAttributes,
-    };
-  }
-
-  const notification = asRecord(root.notification);
-  const notificationAttributes = asRecord(notification?.attributes);
-  if (notificationAttributes) {
-    const notificationId = notification?.id;
-    return {
-      ...notification,
-      ...notificationAttributes,
-      id:
-        notificationId ??
-        (typeof root.id === "string" || typeof root.id === "number"
-          ? root.id
-          : undefined),
-    };
-  }
-
-  const rowData = asRecord(root.data);
-  const rowDataAttributes = asRecord(rowData?.attributes);
-  if (rowDataAttributes) {
-    const rowDataId = rowData?.id;
-    return {
-      ...rowData,
-      ...rowDataAttributes,
-      id:
-        rowDataId ??
-        (typeof root.id === "string" || typeof root.id === "number"
-          ? root.id
-          : undefined),
-    };
-  }
-
-  return notification ?? rowData ?? root;
-};
-
-const normalizeNotifications = (payload: unknown): NotificationItem[] => {
-  const rows = extractDataNotifications(payload);
-  const deduped = new Map<string, NotificationItem>();
-
-  for (const row of rows) {
-    const item = unwrapNotificationRow(row);
-    if (!item) {
-      continue;
-    }
-
-    const rawId = item.id;
-    const id =
-      typeof rawId === "string"
-        ? rawId
-        : typeof rawId === "number"
-          ? String(rawId)
-          : "";
-
-    const type = typeof item.type === "string" ? item.type : "";
-    const title = typeof item.title === "string" ? item.title : "";
-    const message = typeof item.message === "string" ? item.message : "";
-    const assignmentId =
-      typeof item.assignment_id === "string"
-        ? item.assignment_id
-        : typeof item.assignment_id === "number"
-          ? String(item.assignment_id)
-          : "";
-    const taskId =
-      typeof item.task_id === "string"
-        ? item.task_id
-        : typeof item.task_id === "number"
-          ? String(item.task_id)
-          : "";
-    const occurredAt =
-      typeof item.occurred_at === "string"
-        ? item.occurred_at
-        : typeof item.occurredAt === "string"
-          ? item.occurredAt
-          : "";
-
-    if (!id) {
-      continue;
-    }
-
-    const normalized: NotificationItem = {
-      id,
-      type,
-      title,
-      message,
-      assignmentId,
-      taskId,
-      occurredAt,
-    };
-
-    if (!deduped.has(id)) {
-      deduped.set(id, normalized);
-    }
-  }
-
-  return Array.from(deduped.values()).sort((a, b) => {
+// 通知を発生日時順にソート
+const sortNotificationsByOccurredAt = (
+  items: NotificationItem[],
+): NotificationItem[] => {
+  return [...items].sort((a, b) => {
     const aTime = parseOccurredAtMs(a.occurredAt);
     const bTime = parseOccurredAtMs(b.occurredAt);
     const aValid = Number.isFinite(aTime);
@@ -236,19 +46,106 @@ const normalizeNotifications = (payload: unknown): NotificationItem[] => {
     if (aValid && bValid && aTime !== bTime) {
       return bTime - aTime;
     }
-
     if (aValid && !bValid) {
       return -1;
     }
-
     if (!aValid && bValid) {
       return 1;
     }
-
     return 0;
   });
 };
 
+const parseOccurredAtMs = (raw: string): number => {
+  return Date.parse(raw);
+};
+
+// nullでないか
+const asRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+};
+
+// 文字列へ変換
+const pickString = (
+  obj: Record<string, unknown> | null,
+  key: string,
+): string => {
+  const value = obj?.[key];
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return String(value);
+  }
+  return "";
+};
+
+// タスクの割当モードの正規化
+const unwrapDebugPayload = (payload: unknown): unknown => {
+  const root = asRecord(payload);
+  if (!root) {
+    return payload;
+  }
+  if ("debug" in root && "data" in root) {
+    return root.data;
+  }
+  return payload;
+};
+
+// 通知一覧を取り出す
+const extractNotifications = (payload: unknown): unknown[] => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+  const list = data?.notifications;
+  return Array.isArray(list) ? list : [];
+};
+
+// 通知の対象ユーザーIDを取り出す
+const extractViewerUserId = (payload: unknown): string => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data);
+  return pickString(data, "viewer_user_id");
+};
+
+// 通知一覧の正規化
+const normalizeNotifications = (payload: unknown): NotificationItem[] => {
+  const rows = extractNotifications(payload);
+  const deduped = new Map<string, NotificationItem>();
+
+  for (const row of rows) {
+    const item = asRecord(row);
+    if (!item) {
+      continue;
+    }
+
+    const id = pickString(item, "id");
+
+    if (!id) {
+      continue;
+    }
+
+    const normalized: NotificationItem = {
+      id,
+      type: pickString(item, "type"),
+      title: pickString(item, "title"),
+      message: pickString(item, "message"),
+      assignmentId: pickString(item, "assignment_id"),
+      taskId: pickString(item, "task_id"),
+      occurredAt: pickString(item, "occurred_at"),
+    };
+
+    if (!deduped.has(id)) {
+      deduped.set(id, normalized);
+    }
+  }
+
+  return sortNotificationsByOccurredAt(Array.from(deduped.values()));
+};
+
+// 同じ通知が重複表示されないようにする
 const mergeNotificationsById = (
   current: NotificationItem[],
   incoming: NotificationItem[],
@@ -262,97 +159,10 @@ const mergeNotificationsById = (
   for (const item of incoming) {
     map.set(item.id, item);
   }
-
-  return Array.from(map.values()).sort((a, b) => {
-    const aTime = parseOccurredAtMs(a.occurredAt);
-    const bTime = parseOccurredAtMs(b.occurredAt);
-    const aValid = Number.isFinite(aTime);
-    const bValid = Number.isFinite(bTime);
-
-    if (aValid && bValid && aTime !== bTime) {
-      return bTime - aTime;
-    }
-
-    if (aValid && !bValid) {
-      return -1;
-    }
-
-    if (!aValid && bValid) {
-      return 1;
-    }
-
-    return 0;
-  });
+  return sortNotificationsByOccurredAt(Array.from(map.values()));
 };
 
-const summarizeRawNotifications = (payload: unknown) => {
-  const rows = extractDataNotifications(payload);
-  let missingIdCount = 0;
-  let taskAssignedRawCount = 0;
-
-  const taskAssignedSamples: Array<{
-    id: string;
-    type: string;
-    assignment_id: string;
-    task_id: string;
-    occurred_at: string;
-  }> = [];
-
-  for (const row of rows) {
-    const item = unwrapNotificationRow(row);
-    if (!item) {
-      continue;
-    }
-
-    const id =
-      typeof item.id === "string"
-        ? item.id
-        : typeof item.id === "number"
-          ? String(item.id)
-          : "";
-    const type = typeof item.type === "string" ? item.type : "";
-
-    if (!id) {
-      missingIdCount += 1;
-    }
-
-    if (type === "task_assigned") {
-      taskAssignedRawCount += 1;
-      if (taskAssignedSamples.length < 10) {
-        taskAssignedSamples.push({
-          id,
-          type,
-          assignment_id:
-            typeof item.assignment_id === "string"
-              ? item.assignment_id
-              : typeof item.assignment_id === "number"
-                ? String(item.assignment_id)
-                : "",
-          task_id:
-            typeof item.task_id === "string"
-              ? item.task_id
-              : typeof item.task_id === "number"
-                ? String(item.task_id)
-                : "",
-          occurred_at:
-            typeof item.occurred_at === "string"
-              ? item.occurred_at
-              : typeof item.occurredAt === "string"
-                ? item.occurredAt
-                : "",
-        });
-      }
-    }
-  }
-
-  return {
-    rawCount: rows.length,
-    missingIdCount,
-    taskAssignedRawCount,
-    taskAssignedSamples,
-  };
-};
-
+// 通知タイプに応じたラベル
 const typeMeta: Record<NotificationType, { label: string; className: string }> =
   {
     member_joined: {
@@ -384,12 +194,12 @@ const getTypeMeta = (type: string) => {
   };
 };
 
+// 通知の日時を画面表示用に整える
 const formatOccurredAt = (raw: string) => {
   const time = parseOccurredAtMs(raw);
   if (!Number.isFinite(time)) {
     return "日時不明";
   }
-
   return new Intl.DateTimeFormat("ja-JP", {
     year: "numeric",
     month: "2-digit",
@@ -423,7 +233,6 @@ export default function NotificationsPage() {
   const activeUserRef = useRef(currentUserId);
   const abortRef = useRef<AbortController | null>(null);
   const notificationsRef = useRef<NotificationItem[]>([]);
-  const inFlightCountRef = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
     const seq = ++requestSeqRef.current;
@@ -439,11 +248,6 @@ export default function NotificationsPage() {
       if (debugMode) {
         params.set("debug", "1");
       }
-
-      inFlightCountRef.current += 1;
-      console.log("[notifications-inflight]", {
-        count: inFlightCountRef.current,
-      });
 
       const response = await fetch(
         `/api/notifications?${params.toString()}`,
@@ -486,30 +290,11 @@ export default function NotificationsPage() {
       }
 
       const normalized = normalizeNotifications(backendPayload);
-      const rawSummary = summarizeRawNotifications(backendPayload);
       const merged = mergeNotificationsById(
         notificationsRef.current,
         normalized,
       );
       notificationsRef.current = merged;
-
-      console.log("[notifications-debug]", {
-        currentUserId: requestUser,
-        viewer_user_id: viewerUserId || "(none)",
-        "raw.notifications.length": rawSummary.rawCount,
-        "raw.missing_id_count": rawSummary.missingIdCount,
-        "raw.task_assigned_count": rawSummary.taskAssignedRawCount,
-        "raw.task_assigned_samples": rawSummary.taskAssignedSamples,
-        "notifications.length": merged.length,
-        "notifications.filter(task_assigned).map": merged
-          .filter((n) => n.type === "task_assigned")
-          .map((n) => ({
-            id: n.id,
-            assignment_id: n.assignmentId,
-            task_id: n.taskId,
-            occurred_at: n.occurredAt,
-          })),
-      });
 
       setNotifications(merged);
       setDebugPayload(payload);
@@ -528,13 +313,6 @@ export default function NotificationsPage() {
       }
       setError("通知の取得に失敗しました");
     } finally {
-      if (inFlightCountRef.current > 0) {
-        inFlightCountRef.current -= 1;
-      }
-      console.log("[notifications-inflight]", {
-        count: inFlightCountRef.current,
-      });
-
       if (
         seq === requestSeqRef.current &&
         requestUser === activeUserRef.current
@@ -604,7 +382,7 @@ export default function NotificationsPage() {
         {debugMode ? (
           <div className="rounded-md border border-slate-300 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
             <p className="font-semibold">Debug</p>
-            <p>source: data.notifications (fixed)</p>
+            <p>source: data.notifications</p>
             <p>normalized count: {notifications.length}</p>
             <p>
               task_assigned count:{" "}
