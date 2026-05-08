@@ -64,6 +64,7 @@ const pickFirstString = (
   return undefined;
 };
 
+//　Jsonから必要な情報を抽出
 const pickResourceId = (value: unknown) => {
   return pickFirstString(asRecord(value), ["id"]);
 };
@@ -107,7 +108,6 @@ const normalizeGroup = (row: unknown): GroupItem => ({
   name: pickTopLevelString(row, ["name"]) ?? "",
 });
 
-// APIレスポンスの正規化
 const normalizeMembership = (row: unknown): MembershipItem => ({
   id: pickResourceId(row),
   groupId: pickAttribute(row, ["group_id"]),
