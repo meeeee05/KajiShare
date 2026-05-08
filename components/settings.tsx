@@ -310,9 +310,6 @@ export default function UserButton() {
     const params = new URLSearchParams({
       limit: String(NOTIFICATIONS_LIMIT),
     });
-    if (pathname === "/records") {
-      params.set("for_records", "true");
-    }
 
     inFlightCountRef.current += 1;
     console.log("[notifications-bell-inflight]", {
@@ -391,7 +388,7 @@ export default function UserButton() {
         count: inFlightCountRef.current,
       });
     }
-  }, [pathname, seenFingerprintKey, seenKey, session]);
+  }, [seenFingerprintKey, seenKey, session]);
 
   useEffect(() => {
     void fetchLatestNotification();

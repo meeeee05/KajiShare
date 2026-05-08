@@ -23,9 +23,6 @@ type AssignmentItem = {
   id?: string;
   groupId?: string;
   taskId?: string;
-  taskName?: string;
-  taskPoint?: string;
-  taskDescription?: string;
   membershipId?: string;
   status?: string;
   completedDate?: string;
@@ -33,7 +30,6 @@ type AssignmentItem = {
 };
 type EvaluationItem = {
   assignmentId?: string;
-  taskId?: string;
   evaluatorId?: string;
 };
 type GroupRow = { assignment: AssignmentItem; task: TaskItem };
@@ -68,16 +64,18 @@ const pickFirstString = (
   return undefined;
 };
 
-// アカウント削除処理
-const getEntity = (value: unknown) => {
-  const entity = asRecord(value);
-  const attributes = asRecord(entity?.attributes);
-  return { entity, attributes };
+const pickResourceId = (value: unknown) => {
+  return pickFirstString(asRecord(value), ["id"]);
 };
 
-const pickFromEntity = (value: unknown, keys: string[]) => {
-  const { entity, attributes } = getEntity(value);
-  return pickFirstString(attributes, keys) ?? pickFirstString(entity, keys);
+const pickAttribute = (value: unknown, keys: string[]) => {
+  const entity = asRecord(value);
+  const attributes = asRecord(entity?.attributes);
+  return pickFirstString(attributes, keys);
+};
+
+const pickTopLevelString = (value: unknown, keys: string[]) => {
+  return pickFirstString(asRecord(value), keys);
 };
 
 const pickRelationshipId = (value: unknown, key: string) => {
@@ -88,11 +86,15 @@ const pickRelationshipId = (value: unknown, key: string) => {
   return pickFirstString(data, ["id"]);
 };
 
-// APIリクエスト前のゲストセッション期限切れチェック
-const toArray = (payload: unknown): unknown[] => {
+const toTopLevelArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
   }
+
+  return [];
+};
+
+const toJsonApiDataArray = (payload: unknown): unknown[] => {
   const root = asRecord(payload);
   if (!root) {
     return [];
@@ -101,16 +103,16 @@ const toArray = (payload: unknown): unknown[] => {
 };
 
 const normalizeGroup = (row: unknown): GroupItem => ({
-  id: pickFromEntity(row, ["id"]),
-  name: pickFromEntity(row, ["name"]) ?? "",
+  id: pickTopLevelString(row, ["id"]),
+  name: pickTopLevelString(row, ["name"]) ?? "",
 });
 
 // APIレスポンスの正規化
 const normalizeMembership = (row: unknown): MembershipItem => ({
-  id: pickFromEntity(row, ["id"]),
-  groupId: pickFromEntity(row, ["group_id"]),
+  id: pickResourceId(row),
+  groupId: pickAttribute(row, ["group_id"]),
   member: {
-    id: pickFromEntity(row, ["user_id"]) ?? pickRelationshipId(row, "user"),
+    id: pickRelationshipId(row, "user"),
     name: undefined,
     email: undefined,
   },
@@ -118,44 +120,34 @@ const normalizeMembership = (row: unknown): MembershipItem => ({
 
 // 評価登録
 const normalizeTask = (row: unknown, index: number): TaskItem => ({
-  id: pickFromEntity(row, ["id"]),
-  name: pickFromEntity(row, ["name"]) ?? `タスク ${index + 1}`,
-  point: pickFromEntity(row, ["point"]),
-  description: pickFromEntity(row, ["description"]),
+  id: pickResourceId(row),
+  name: pickAttribute(row, ["name"]) ?? `タスク ${index + 1}`,
+  point: pickAttribute(row, ["point"]),
+  description: pickAttribute(row, ["description"]),
 });
 
 const normalizeAssignment = (row: unknown): AssignmentItem => ({
-  id: pickFromEntity(row, ["id"]),
-  groupId: pickFromEntity(row, ["group_id"]),
-  taskId: pickFromEntity(row, ["task_id"]) ?? pickRelationshipId(row, "task"),
-  taskName: pickFromEntity(row, ["assignment_task_name"]),
-  taskPoint: pickFromEntity(row, ["task_point"]),
-  taskDescription: pickFromEntity(row, ["task_description"]),
-  membershipId:
-    pickFromEntity(row, ["membership_id"]) ??
-    pickRelationshipId(row, "membership"),
-  status: pickFromEntity(row, ["status"]),
-  completedDate: pickFromEntity(row, ["completed_date"]),
-  assigneeId: pickFromEntity(row, ["assigned_to_id"]),
+  id: pickResourceId(row),
+  groupId: pickAttribute(row, ["group_id"]),
+  taskId: pickRelationshipId(row, "task"),
+  membershipId: pickRelationshipId(row, "membership"),
+  status: pickAttribute(row, ["status"]),
+  completedDate: pickAttribute(row, ["completed_date"]),
+  assigneeId: pickAttribute(row, ["assigned_to_id"]),
 });
 
 const normalizeEvaluation = (row: unknown): EvaluationItem => ({
-  assignmentId:
-    pickFromEntity(row, ["assignment_id"]) ??
-    pickRelationshipId(row, "assignment"),
-  taskId: pickFromEntity(row, ["task_id"]) ?? pickRelationshipId(row, "task"),
-  evaluatorId:
-    pickFromEntity(row, ["evaluator_id"]) ??
-    pickRelationshipId(row, "evaluator"),
+  assignmentId: pickRelationshipId(row, "assignment"),
+  evaluatorId: pickRelationshipId(row, "evaluator"),
 });
 
 const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
   const root = asRecord(payload);
   const row = asRecord(root?.data) ?? root;
   return {
-    id: pickFromEntity(row, ["id"]),
-    name: pickFromEntity(row, ["name"]),
-    email: pickFromEntity(row, ["email"]),
+    id: pickResourceId(row),
+    name: pickAttribute(row, ["name"]),
+    email: pickAttribute(row, ["email"]),
   };
 };
 
@@ -259,7 +251,7 @@ export default async function EvaluationsPage() {
 
   const groups = Array.from(
     new Map(
-      toArray(groupsPayload)
+      toTopLevelArray(groupsPayload)
         .map((row) => normalizeGroup(row))
         .filter((group) => group.name.trim().length > 0)
         .map((group) => [
@@ -295,12 +287,13 @@ export default async function EvaluationsPage() {
   }
 
   // グループごとの評価対象タスクの取得と評価登録フォームの表示
-  const memberships = toArray(membershipsPayload).map((row) =>
+  const memberships = toJsonApiDataArray(membershipsPayload).map((row) =>
     normalizeMembership(row),
   );
-  const normalizedEvaluations = toArray(evaluationsPayload).map((row) =>
-    normalizeEvaluation(row),
-  );
+  const normalizedEvaluations =
+    toJsonApiDataArray(evaluationsPayload).map((row) =>
+      normalizeEvaluation(row),
+    );
 
   // 評価対象から自分自身を除外
   const apiUser = extractCurrentUserIdentity(mePayload);
@@ -326,14 +319,6 @@ export default async function EvaluationsPage() {
       .filter((id) => id.length > 0),
   );
 
-  // 評価済み判定
-  const evaluatedTaskIdsWithoutAssignment = new Set(
-    normalizedEvaluations
-      .filter((evaluation) => !normalizeText(evaluation.assignmentId))
-      .map((evaluation) => normalizeText(evaluation.taskId))
-      .filter((id) => id.length > 0),
-  );
-
   //　グループごとに評価対象タスクを取得
   const groupsWithEvaluations = await Promise.all(
     groups.map(async (group) => {
@@ -346,7 +331,7 @@ export default async function EvaluationsPage() {
         `${v1Base}/groups/${encodeURIComponent(group.id)}/tasks`,
       );
 
-      const tasks = toArray(tasksPayload).map((row, index) =>
+      const tasks = toJsonApiDataArray(tasksPayload).map((row, index) =>
         normalizeTask(row, index),
       );
       const uniqueTasks = Array.from(
@@ -386,7 +371,7 @@ export default async function EvaluationsPage() {
       // 評価対象を選別
       const parsedAssignments = assignmentPayloadsByTask.flatMap(
         ({ taskId, payload }) => {
-          const rows = toArray(payload);
+          const rows = toJsonApiDataArray(payload);
           return rows
             .map((row) => {
               const normalized = normalizeAssignment(row);
@@ -444,13 +429,9 @@ export default async function EvaluationsPage() {
       const rows = completedAssignments
         .map((assignment): GroupRow | null => {
           const normalizedAssignmentId = normalizeText(assignment.id);
-          const normalizedTaskId = normalizeText(assignment.taskId);
           const assignmentMembershipId = normalizeText(assignment.membershipId);
 
           if (
-            (!normalizedAssignmentId &&
-              normalizedTaskId &&
-              evaluatedTaskIdsWithoutAssignment.has(normalizedTaskId)) ||
             (normalizedAssignmentId &&
               evaluatedAssignmentIds.has(normalizedAssignmentId)) ||
             (assignmentMembershipId &&
@@ -468,13 +449,10 @@ export default async function EvaluationsPage() {
             return null;
           }
 
-          // タスクが存在しない場合は表示しない
-          const task = taskById.get(normalizeText(assignment.taskId)) ?? {
-            id: assignment.taskId,
-            name: assignment.taskName ?? "タスク",
-            point: assignment.taskPoint ?? "-",
-            description: assignment.taskDescription ?? "-",
-          };
+          const task = taskById.get(normalizeText(assignment.taskId));
+          if (!task) {
+            return null;
+          }
 
           return { assignment, task };
         })

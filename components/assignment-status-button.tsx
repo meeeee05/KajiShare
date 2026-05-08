@@ -257,6 +257,13 @@ const buildAssignmentPayload = (status: CanonicalStatus) => {
   };
 };
 
+const buildAssignmentStatusPayload = (status: CanonicalStatus) => ({
+  assignment: {
+    completed_date: status === "completed" ? todayYmd() : null,
+    status,
+  },
+});
+
 const buildAssignmentCreatePayloads = (
   taskId: string,
   status: CanonicalStatus,
@@ -552,7 +559,7 @@ export default function AssignmentStatusButton({
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(buildAssignmentPayload(targetStatus)),
+            body: JSON.stringify(buildAssignmentStatusPayload(targetStatus)),
           }).catch(() => null);
 
           if (
