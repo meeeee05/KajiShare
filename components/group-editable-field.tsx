@@ -43,13 +43,13 @@ const normalizeAssignMode = (value?: string) => {
     return "random";
   }
 
-  if (normalized === "manual" || normalized === "手動で決める") {
+  if (normalized === "manual") {
     return "manual";
   }
-  if (normalized === "random" || normalized === "ランダムで決める") {
+  if (normalized === "random") {
     return "random";
   }
-  if (normalized === "balanced" || normalized === "バランスを考慮する") {
+  if (normalized === "balanced") {
     return "balanced";
   }
 
@@ -70,10 +70,10 @@ const normalizeBalancedType = (value?: string) => {
     return "";
   }
 
-  if (normalized === "more" || normalized === "多め") {
+  if (normalized === "more") {
     return "more";
   }
-  if (normalized === "less" || normalized === "少なめ") {
+  if (normalized === "less") {
     return "less";
   }
 

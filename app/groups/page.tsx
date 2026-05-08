@@ -9,54 +9,47 @@ import {
   isGuestSessionUser,
 } from "@/lib/guest-session";
 
+// 型定義
 type AnyRecord = Record<string, unknown>;
-
 type GroupListItem = {
   id?: string;
   name: string;
   share_key?: string;
   assign_mode?: string;
   balancedType?: string;
-  creator?: {
-    name?: string;
-  };
+  adminName?: string;
   role?: string;
 };
+type MembershipItem = {
+  groupId?: string;
+  role?: string;
+  userName?: string;
+};
 
-const SHARE_KEY = "share_key";
-
-const ASSIGN_MODE = "assign_mode";
-
-const BALANCE_TYPE = "balance_type";
-
+// 担当者割り当て
 const normalizeAssignMode = (value?: string) => {
   const normalized = normalizeText(value);
 
-  if (!normalized) {
-    return "random";
-  }
-
-  if (normalized.includes("バランス") || normalized.includes("balanced")) {
+  if (normalized === "balanced") {
     return "balanced";
   }
-  if (normalized.includes("random") || normalized.includes("ランダム")) {
+  if (normalized === "random") {
     return "random";
   }
-  if (normalized.includes("manual") || normalized.includes("手動")) {
+  if (normalized === "manual") {
     return "manual";
   }
-
   return "random";
 };
 
-const isbalancedAssignMode = (value?: string) => {
+// 負担バランス
+const isBalancedAssignMode = (value?: string) => {
   return normalizeAssignMode(value) === "balanced";
 };
 
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
-const isFallbackName = (name?: string) => /^グループ\s+\d+$/.test(name ?? "");
-
+// グループ表示順の正規化
 const compareStableGroupOrder = (a: GroupListItem, b: GroupListItem) => {
   const aId = (a.id ?? "").trim();
   const bId = (b.id ?? "").trim();
@@ -85,15 +78,14 @@ const compareStableGroupOrder = (a: GroupListItem, b: GroupListItem) => {
       return byShare;
     }
   }
-
   return 0;
 };
 
+// 戻り値判定
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-
   return value as AnyRecord;
 };
 
@@ -114,111 +106,11 @@ const pickFirstString = (
       return String(value);
     }
   }
-
   return undefined;
 };
 
-const unwrapEntity = (value: AnyRecord | null) =>
-  asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
-
-const pickFromSources = (
-  sourceA: AnyRecord | null,
-  sourceB: AnyRecord | null,
-  keys: string[],
-) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
-
-const buildGroupItem = (
-  group: AnyRecord | null,
-  base: AnyRecord | null,
-  fallbackName: string,
-): GroupListItem => {
-  const sourceGroup = unwrapEntity(group);
-  const sourceBase = unwrapEntity(base);
-
-  const id = pickFromSources(sourceGroup, sourceBase, [
-    "id",
-    "group_id",
-    "groupId",
-    "gid",
-  ]);
-
-  const name =
-    pickFirstString(sourceGroup, ["name"]) ??
-    pickFirstString(sourceBase, ["name"]) ??
-    fallbackName;
-
-  const share_key = pickFromSources(sourceGroup, sourceBase, [SHARE_KEY]);
-
-  const assign_mode = normalizeAssignMode(
-    pickFromSources(sourceGroup, sourceBase, [ASSIGN_MODE]),
-  );
-
-  const balancedType = pickFromSources(sourceGroup, sourceBase, [BALANCE_TYPE]);
-
-  const creatorSource = asRecord(sourceGroup?.creator);
-
-  const creator = creatorSource
-    ? {
-        name: pickFirstString(creatorSource, ["name"]),
-      }
-    : undefined;
-
-  return {
-    id,
-    name,
-    share_key,
-    assign_mode,
-    balancedType,
-    creator,
-  };
-};
-
-const normalizeMemberships = (memberships: unknown): GroupListItem[] => {
-  if (!Array.isArray(memberships)) {
-    return [];
-  }
-
-  return memberships.map((item, index) => {
-    const membership = asRecord(item);
-    const group = asRecord(membership?.group) ?? membership;
-    const normalized = buildGroupItem(
-      group,
-      membership,
-      `グループ ${index + 1}`,
-    );
-
-    const role = pickFirstString(membership, ["role", "member_role", "type"]);
-
-    return {
-      ...normalized,
-      role,
-    };
-  });
-};
-
-const normalizeGroups = (groupsPayload: unknown): GroupListItem[] => {
-  const groups = extractMembershipsArray(groupsPayload);
-
-  return groups
-    .map((item, index) => {
-      const root = asRecord(item);
-      const group = asRecord(root?.group) ?? root;
-      return buildGroupItem(group, root, `グループ ${index + 1}`);
-    })
-    .filter((group) => Boolean(group.name?.trim()));
-};
-
-const firstArray = (...values: unknown[]): unknown[] => {
-  for (const value of values) {
-    if (Array.isArray(value) && value.length > 0) {
-      return value;
-    }
-  }
-
-  return [];
-};
-
-const extractMembershipsArray = (payload: unknown): unknown[] => {
+// APIレスポンスをデータ配列として取り出す
+const toDataArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
   }
@@ -227,78 +119,40 @@ const extractMembershipsArray = (payload: unknown): unknown[] => {
   if (!root) {
     return [];
   }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.memberships,
-    root.groups,
-    rootData?.data,
-    rootData?.groups,
-    rootData?.memberships,
-    rootData?.rows,
-    rootData?.list,
-    rootData?.results,
-    rootData?.items,
-    rootDataData?.groups,
-    rootDataData?.memberships,
-    rootDataData?.rows,
-    rootDataData?.list,
-    rootDataData?.results,
-    rootDataData?.items,
-    root.items,
-    root.results,
-    root.rows,
-    root.list,
-  );
+  return Array.isArray(root.data) ? root.data : [];
 };
 
-const enrichFallbackNames = async (
-  groups: GroupListItem[],
-  apiUrl: string,
-  idToken: string,
-  isGuestSession: boolean,
-): Promise<GroupListItem[]> => {
-  return Promise.all(
-    groups.map(async (group) => {
-      const isFallback = /^グループ\s+\d+$/.test(group.name);
-      if (!isFallback || !group.id) {
-        return group;
-      }
-
-      const res = await fetch(`${apiUrl}/groups/${group.id}`, {
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-        cache: "no-store",
-      }).catch(() => null);
-
-      if (!res?.ok) {
-        if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
-          redirect(GUEST_EXPIRED_REDIRECT_PATH);
-        }
-
-        return group;
-      }
-
-      const payload = await res.json().catch(() => null);
-      const root = asRecord(payload);
-      const detail = asRecord(root?.group) ?? asRecord(root?.data) ?? root;
-      const name =
-        pickFirstString(detail, ["name"]) ?? pickFirstString(root, ["name"]);
-
-      if (!name) {
-        return group;
-      }
-
-      return {
-        ...group,
-        name,
-      };
-    }),
-  );
+const unwrapJsonApiResource = (item: unknown) => {
+  const resource = asRecord(item);
+  return asRecord(resource?.attributes) ?? resource;
 };
+
+const normalizeGroup = (item: unknown, index: number): GroupListItem => {
+  const group = asRecord(item);
+
+  return {
+    id: pickFirstString(group, ["id"]),
+    name: pickFirstString(group, ["name"]) ?? `グループ ${index + 1}`,
+    share_key: pickFirstString(group, ["share_key"]),
+    assign_mode: normalizeAssignMode(pickFirstString(group, ["assign_mode"])),
+    balancedType: pickFirstString(group, ["balance_type"]),
+  };
+};
+
+const normalizeMembership = (item: unknown): MembershipItem => {
+  const membership = unwrapJsonApiResource(item);
+
+  return {
+    groupId: pickFirstString(membership, ["group_id"]),
+    role: pickFirstString(membership, ["role"]),
+    userName: pickFirstString(membership, ["user_name"]),
+  };
+};
+
+const normalizeGroups = (groupsPayload: unknown): GroupListItem[] =>
+  toDataArray(groupsPayload).map((item, index) =>
+    normalizeGroup(item, index),
+  );
 
 export default async function GroupsPage() {
   const session = await auth();
@@ -318,168 +172,61 @@ export default async function GroupsPage() {
     );
   }
 
-  const currentUserName = normalizeText(session.user?.name ?? undefined);
-
   const trimmedApiUrl = apiUrl.replace(/\/+$/, "");
   const v1ApiUrl = trimmedApiUrl.endsWith("/api/v1")
     ? trimmedApiUrl
     : `${trimmedApiUrl}/api/v1`;
 
-  const fetchAllOkJson = async (urls: string[]): Promise<unknown[]> => {
-    const payloads: unknown[] = [];
+  // 成功したらJSONを返す
+  const fetchOkJson = async (url: string): Promise<unknown | null> => {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      cache: "no-store",
+    }).catch(() => null);
 
-    for (const url of urls) {
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
-        cache: "no-store",
-      }).catch(() => null);
-
-      if (!res?.ok) {
-        if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
-          redirect(GUEST_EXPIRED_REDIRECT_PATH);
-        }
-
-        continue;
+    if (!res?.ok) {
+      if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
+        redirect(GUEST_EXPIRED_REDIRECT_PATH);
       }
-
-      const payload = await res.json().catch(() => null);
-      if (payload != null) {
-        payloads.push(payload);
-      }
+      return null;
     }
-
-    return payloads;
+    return res.json().catch(() => null);
   };
 
-  const membershipsPayloads = await fetchAllOkJson([
-    `${trimmedApiUrl}/memberships`,
-    `${v1ApiUrl}/memberships`,
-  ]);
-  const memberships = membershipsPayloads.flatMap((payload) =>
-    extractMembershipsArray(payload),
-  );
-
-  const groupsPayloads = await fetchAllOkJson([
-    `${v1ApiUrl}/groups`,
-    `${trimmedApiUrl}/groups`,
+  // グループ一覧と所属情報を取得
+  const [groupsPayload, membershipsPayload] = await Promise.all([
+    fetchOkJson(`${v1ApiUrl}/groups`),
+    fetchOkJson(`${v1ApiUrl}/memberships`),
   ]);
 
-  const groupsFromGroupsApi = groupsPayloads.flatMap((payload) =>
-    normalizeGroups(payload),
-  );
-  const groupsFromMemberships = normalizeMemberships(memberships);
+  const memberships = toDataArray(membershipsPayload).map(normalizeMembership);
 
-  const roleByKey = new Map<string, string>();
-  for (const membershipGroup of groupsFromMemberships) {
-    if (membershipGroup.id && membershipGroup.role) {
-      roleByKey.set(`id:${membershipGroup.id}`, membershipGroup.role);
+  const roleByGroupId = new Map<string, string>();
+  const adminNameByGroupId = new Map<string, string>();
+
+  for (const membership of memberships) {
+    if (!membership.groupId) {
+      continue;
     }
-    if (membershipGroup.share_key && membershipGroup.role) {
-      roleByKey.set(`share:${membershipGroup.share_key}`, membershipGroup.role);
+
+    if (membership.role) {
+      roleByGroupId.set(membership.groupId, membership.role);
+    }
+
+    if (membership.role === "admin" && membership.userName) {
+      adminNameByGroupId.set(membership.groupId, membership.userName);
     }
   }
 
-  const mergedMap = new Map<string, GroupListItem>();
-
-  const findExistingKey = (group: GroupListItem): string | undefined => {
-    const nextId = normalizeText(group.id);
-    const nextShare = normalizeText(group.share_key);
-    const nextName = normalizeText(group.name);
-    let foundKey: string | undefined;
-
-    mergedMap.forEach((prev, key) => {
-      if (foundKey) {
-        return;
-      }
-
-      const prevId = normalizeText(prev.id);
-      const prevShare = normalizeText(prev.share_key);
-      const prevName = normalizeText(prev.name);
-
-      if (nextId && prevId && nextId === prevId) {
-        foundKey = key;
-        return;
-      }
-
-      if (nextShare && prevShare && nextShare === prevShare) {
-        foundKey = key;
-        return;
-      }
-
-      if (
-        nextName &&
-        prevName &&
-        nextName === prevName &&
-        !isFallbackName(group.name) &&
-        !isFallbackName(prev.name)
-      ) {
-        foundKey = key;
-        return;
-      }
-    });
-
-    return foundKey;
-  };
-
-  const put = (group: GroupListItem) => {
-    const preferredKey = group.id
-      ? `id:${group.id}`
-      : group.share_key
-        ? `share:${group.share_key}`
-        : `name:${group.name}`;
-
-    const existingKey = findExistingKey(group);
-    const key = existingKey ?? preferredKey;
-
-    const prev = mergedMap.get(key);
-    if (!prev) {
-      mergedMap.set(key, group);
-      return;
-    }
-
-    mergedMap.set(key, {
-      ...prev,
+  // グループ一覧に役割と管理者名を紐付け
+  const groupList = normalizeGroups(groupsPayload)
+    .map((group) => ({
       ...group,
-      id: group.id ?? prev.id,
-      share_key: group.share_key ?? prev.share_key,
-      assign_mode: group.assign_mode ?? prev.assign_mode,
-      balancedType: group.balancedType ?? prev.balancedType,
-      creator: group.creator ?? prev.creator,
-      name:
-        isFallbackName(prev.name) && !isFallbackName(group.name)
-          ? group.name
-          : prev.name,
-      role: group.role ?? prev.role,
-    });
-  };
-
-  for (const group of groupsFromGroupsApi) {
-    const role =
-      (group.id ? roleByKey.get(`id:${group.id}`) : undefined) ??
-      (group.share_key ? roleByKey.get(`share:${group.share_key}`) : undefined);
-
-    put({
-      ...group,
-      role: role ?? group.role,
-    });
-  }
-
-  for (const group of groupsFromMemberships) {
-    put(group);
-  }
-
-  let groupList = Array.from(mergedMap.values());
-
-  groupList = await enrichFallbackNames(
-    groupList,
-    apiUrl,
-    idToken,
-    isGuestSession,
-  );
-
-  groupList = groupList
+      role: group.id ? roleByGroupId.get(group.id) : undefined,
+      adminName: group.id ? adminNameByGroupId.get(group.id) : undefined,
+    }))
     .map((group, index) => ({ group, index }))
     .sort((a, b) => {
       const byStable = compareStableGroupOrder(a.group, b.group);
@@ -551,7 +298,7 @@ export default async function GroupsPage() {
                 />
               </div>
 
-              {isbalancedAssignMode(group.assign_mode) ? (
+              {isBalancedAssignMode(group.assign_mode) ? (
                 <div className="grid grid-cols-1 items-start gap-2 text-base sm:grid-cols-[140px_1fr] sm:items-center sm:gap-3 sm:text-lg">
                   <span className="font-semibold text-slate-600 dark:text-slate-300">
                     負担バランス
@@ -572,7 +319,7 @@ export default async function GroupsPage() {
                   管理者
                 </span>
                 <span className="font-semibold break-all">
-                  {group.creator?.name ?? "-"}
+                  {group.adminName ?? "-"}
                 </span>
               </div>
 
@@ -581,13 +328,9 @@ export default async function GroupsPage() {
                   あなたの権限
                 </span>
                 <span className="font-semibold break-all">
-                  {currentUserName !== "" &&
-                  currentUserName === normalizeText(group.creator?.name)
-                    ? "管理者"
-                    : "メンバー"}
+                  {group.role === "admin" ? "管理者" : "メンバー"}
                 </span>
               </div>
-
               <div className="pt-2">
                 <GroupLeaveLink
                   groupId={group.id}
