@@ -10,12 +10,10 @@ import {
 
 // 型定義
 type AnyRecord = Record<string, unknown>;
-
 type GroupItem = {
   id?: string;
   name: string;
 };
-
 type MembershipItem = {
   groupId?: string;
   userId?: string;
@@ -41,7 +39,6 @@ const pickFirstString = (
   if (!obj) {
     return undefined;
   }
-
   for (const key of keys) {
     const value = obj[key];
     if (typeof value === "string" && value.trim()) {
@@ -51,7 +48,6 @@ const pickFirstString = (
       return String(value);
     }
   }
-
   return undefined;
 };
 
@@ -60,7 +56,6 @@ const dataArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   const root = asRecord(payload);
   return Array.isArray(root?.data) ? root.data : [];
 };
@@ -80,18 +75,19 @@ const pickRelationshipId = (row: unknown, key: string) => {
 
 // グループ一覧の正規化
 const normalizeGroups = (payload: unknown): GroupItem[] =>
-  dataArray(payload).flatMap((row) => {
-    const group = asRecord(row);
-    const name = pickFirstString(group, ["name"]);
-    return name
-      ? [
-          {
-            id: pickFirstString(group, ["id"]),
-            name,
-          },
-        ]
-      : [];
-  });
+  dataArray(payload)
+    .map((row): GroupItem | null => {
+      const group = asRecord(row);
+      const name = pickFirstString(group, ["name"]);
+      if (!name) {
+        return null;
+      }
+      return {
+        id: pickFirstString(group, ["id"]),
+        name,
+      };
+    })
+    .filter((group): group is GroupItem => Boolean(group));
 
 // メンバーシップ一覧の正規化
 const normalizeMemberships = (payload: unknown): MembershipItem[] =>
@@ -144,10 +140,8 @@ export default async function RecurringTasksPage({
       if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
         redirect(GUEST_EXPIRED_REDIRECT_PATH);
       }
-
       return null;
     }
-
     return res.json().catch(() => null);
   };
 

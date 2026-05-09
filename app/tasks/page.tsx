@@ -9,13 +9,12 @@ import {
   isGuestSessionUser,
 } from "@/lib/guest-session";
 
+// 型定義
 type AnyRecord = Record<string, unknown>;
-
 type GroupItem = {
   id?: string;
   name: string;
 };
-
 type TaskItem = {
   id?: string;
   sourceTaskId?: string;
@@ -26,20 +25,18 @@ type TaskItem = {
   isRecurring?: boolean;
   sourceIndex: number;
 };
-
 type RecurringTaskItem = {
   id?: string;
   name: string;
   point?: string;
   description?: string;
-  scheduleType: "weekly" | "every_n_days" | "";
-  dayOfWeek?: string;
-  intervalDays?: string;
+  scheduleType: "weekly" | "biweekly" | "";
   startsOn?: string;
   active: boolean;
   sourceIndex: number;
 };
 
+// nullでないか
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -47,6 +44,7 @@ const asRecord = (value: unknown): AnyRecord | null => {
   return value as AnyRecord;
 };
 
+// 文字列へ変換
 const pickFirstString = (
   obj: AnyRecord | null,
   keys: string[],
@@ -54,7 +52,6 @@ const pickFirstString = (
   if (!obj) {
     return undefined;
   }
-
   for (const key of keys) {
     const value = obj[key];
     if (typeof value === "string" && value.trim()) {
@@ -64,218 +61,71 @@ const pickFirstString = (
       return String(value);
     }
   }
-
   return undefined;
 };
 
+// APIのattributesを取り出す
 const unwrapEntity = (value: AnyRecord | null) =>
   asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
 
-const pickFromSources = (
-  sourceA: AnyRecord | null,
-  sourceB: AnyRecord | null,
-  keys: string[],
-) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
-
-const firstArray = (...values: unknown[]): unknown[] => {
-  for (const value of values) {
-    if (Array.isArray(value)) {
-      return value;
-    }
-  }
-  return [];
-};
-
-const extractGroupsArray = (payload: unknown): unknown[] => {
+// data配列を取り出す
+const dataArray = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
   }
-
   const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.groups,
-    root.memberships,
-    root.data,
-    root.items,
-    root.results,
-    rootData?.groups,
-    rootData?.memberships,
-    rootData?.items,
-    rootData?.results,
-    rootDataData?.groups,
-    rootDataData?.memberships,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
+  return Array.isArray(root?.data) ? root.data : [];
 };
 
-const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
-  const map = new Map<string, GroupItem>();
+const topLevelArray = (payload: unknown): unknown[] =>
+  Array.isArray(payload) ? payload : [];
 
-  const put = (group: GroupItem) => {
-    const key = group.id ? `id:${group.id}` : `name:${group.name}`;
-    if (!map.has(key)) {
-      map.set(key, group);
-    }
-  };
-
-  for (const payload of payloads) {
-    const rows = extractGroupsArray(payload);
-    for (const row of rows) {
-      const root = asRecord(row);
-      const membershipGroup = asRecord(root?.group);
-      const item = membershipGroup ?? root;
-
-      const id = pickFirstString(item, ["id", "group_id", "groupId"]);
-      const name = pickFirstString(item, ["name"]);
-
+// グループ一覧の正規化
+const normalizeGroups = (payload: unknown): GroupItem[] =>
+  dataArray(payload)
+    .map((row): GroupItem | null => {
+      const group = asRecord(row);
+      const name = pickFirstString(group, ["name"]);
       if (!name) {
-        continue;
+        return null;
       }
+      return { id: pickFirstString(group, ["id"]), name };
+    })
+    .filter((group): group is GroupItem => Boolean(group));
 
-      put({ id, name });
-    }
-  }
-
-  return Array.from(map.values());
-};
-
-const extractTasksArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-  const rootTask = asRecord(root.task);
-
-  return firstArray(
-    root.tasks,
-    root.items,
-    root.results,
-    root.data,
-    rootTask?.items,
-    rootTask?.tasks,
-    rootData?.tasks,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.tasks,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-};
-
-const extractRecurringTasksArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-  const rootRecurring = asRecord(root.recurring_task);
-
-  return firstArray(
-    root.recurring_tasks,
-    root.items,
-    root.results,
-    root.data,
-    rootRecurring?.items,
-    rootRecurring?.recurring_tasks,
-    rootData?.recurring_tasks,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.recurring_tasks,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-};
-
+// 周期タスクの正規化
 const normalizeRecurringTask = (
   row: unknown,
   index: number,
 ): RecurringTaskItem => {
   const root = asRecord(row);
-  const recurringRoot = asRecord(root?.recurring_task) ?? root;
-  const recurring = unwrapEntity(recurringRoot);
-
-  const scheduleTypeRaw =
-    pickFromSources(recurring, recurringRoot, [
-      "schedule_type",
-      "scheduleType",
-    ]) ?? "";
+  const scheduleTypeRaw = pickFirstString(root, ["schedule_type"]) ?? "";
 
   const scheduleType: RecurringTaskItem["scheduleType"] =
     scheduleTypeRaw === "weekly"
       ? "weekly"
-      : scheduleTypeRaw === "every_n_days"
-        ? "every_n_days"
+      : scheduleTypeRaw === "biweekly"
+        ? "biweekly"
         : "";
-
-  const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
-  const active =
-    activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
-
   return {
-    id:
-      pickFromSources(recurring, recurringRoot, ["id", "recurring_task_id"]) ??
-      pickFirstString(root, ["id", "recurring_task_id"]),
-    name:
-      pickFromSources(recurring, recurringRoot, ["name", "title"]) ??
-      `周期タスク ${index + 1}`,
-    point: pickFromSources(recurring, recurringRoot, [
-      "point",
-      "score",
-      "value",
-    ]),
-    description: pickFromSources(recurring, recurringRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
+    id: pickFirstString(root, ["id"]),
+    name: pickFirstString(root, ["name"]) ?? "",
+    point: pickFirstString(root, ["point"]),
+    description: pickFirstString(root, ["description"]),
     scheduleType,
-    dayOfWeek: pickFromSources(recurring, recurringRoot, [
-      "day_of_week",
-      "dayOfWeek",
-    ]),
-    intervalDays: pickFromSources(recurring, recurringRoot, [
-      "interval_days",
-      "intervalDays",
-    ]),
-    startsOn: pickFromSources(recurring, recurringRoot, [
-      "starts_on",
-      "startsOn",
-    ]),
-    active,
+    startsOn: pickFirstString(root, ["starts_on"]),
+    active: root?.active === true,
     sourceIndex: index,
   };
 };
 
+// 周期タスクを通常タスクと同じ表示形式に揃える
 const recurringTaskToTask = (
   recurringTask: RecurringTaskItem,
   index: number,
 ): TaskItem => {
   const stableId =
     recurringTask.id ?? `${recurringTask.name}:${recurringTask.sourceIndex}`;
-
   return {
     id: `recurring:${stableId}`,
     sourceTaskId: recurringTask.id,
@@ -288,31 +138,16 @@ const recurringTaskToTask = (
   };
 };
 
+// タスク一覧の正規化
 const normalizeTask = (row: unknown, index: number): TaskItem => {
-  const root = asRecord(row);
-  const taskRoot = asRecord(root?.task) ?? root;
-  const task = unwrapEntity(taskRoot);
-
-  const name =
-    pickFromSources(task, taskRoot, [
-      "name",
-      "title",
-      "task_name",
-      "content",
-    ]) ?? `タスク ${index + 1}`;
-
+  const resource = asRecord(row);
+  const task = unwrapEntity(resource);
   return {
-    id:
-      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
-      pickFirstString(root, ["id", "task_id", "taskId"]),
-    name,
-    point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    description: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
-    createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
+    id: pickFirstString(resource, ["id"]),
+    name: pickFirstString(task, ["name"]) ?? "",
+    point: pickFirstString(task, ["point"]),
+    description: pickFirstString(task, ["description"]),
+    createdAt: pickFirstString(task, ["scheduled_for"]),
     sourceIndex: index,
   };
 };
@@ -320,10 +155,10 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
 export default async function TasksPage() {
   const session = await auth();
 
+  // 未サインインならセッション切れページへ
   if (!session) {
     redirect("/auth/timeout");
   }
-
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;
   const isGuestSession = isGuestSessionUser(session.user);
@@ -337,6 +172,7 @@ export default async function TasksPage() {
   const base = apiUrl.replace(/\/+$/, "");
   const v1Base = base.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
+  // APIからJSONを取得する
   const fetchOkJson = async (url: string): Promise<unknown | null> => {
     const res = await fetch(url, {
       headers: {
@@ -349,28 +185,14 @@ export default async function TasksPage() {
       if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
         redirect(GUEST_EXPIRED_REDIRECT_PATH);
       }
-
       return null;
     }
-
     return res.json().catch(() => null);
   };
 
-  const [groupsV1, groupsLegacy, membershipsV1, membershipsLegacy] =
-    await Promise.all([
-      fetchOkJson(`${v1Base}/groups`),
-      fetchOkJson(`${base}/groups`),
-      fetchOkJson(`${v1Base}/memberships`),
-      fetchOkJson(`${base}/memberships`),
-    ]);
+  const groups = normalizeGroups(await fetchOkJson(`${v1Base}/groups`));
 
-  const groups = normalizeGroups([
-    groupsV1,
-    groupsLegacy,
-    membershipsV1,
-    membershipsLegacy,
-  ]);
-
+  // グループがない場合は案内を表示
   if (groups.length === 0) {
     return (
       <div className="prose max-w-none p-4 sm:p-6">
@@ -396,6 +218,7 @@ export default async function TasksPage() {
     );
   }
 
+  // グループごとに通常タスクと周期タスクを取得
   const groupsWithTasks = await Promise.all(
     groups.map(async (group) => {
       if (!group.id) {
@@ -405,37 +228,13 @@ export default async function TasksPage() {
         };
       }
 
-      const candidates = [
-        `${v1Base}/groups/${encodeURIComponent(group.id)}/tasks`,
-        `${base}/groups/${encodeURIComponent(group.id)}/tasks`,
-        `${v1Base}/tasks?group_id=${encodeURIComponent(group.id)}`,
-        `${base}/tasks?group_id=${encodeURIComponent(group.id)}`,
-      ];
+      const groupId = encodeURIComponent(group.id);
+      const [payload, recurringPayload] = await Promise.all([
+        fetchOkJson(`${v1Base}/groups/${groupId}/tasks`),
+        fetchOkJson(`${v1Base}/groups/${groupId}/recurring_tasks`),
+      ]);
 
-      let payload: unknown | null = null;
-      for (const url of candidates) {
-        const data = await fetchOkJson(url);
-        if (data != null) {
-          payload = data;
-          break;
-        }
-      }
-
-      const recurringCandidates = [
-        `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
-        `${base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
-      ];
-
-      let recurringPayload: unknown | null = null;
-      for (const url of recurringCandidates) {
-        const data = await fetchOkJson(url);
-        if (data != null) {
-          recurringPayload = data;
-          break;
-        }
-      }
-
-      const tasks = extractTasksArray(payload)
+      const tasks = dataArray(payload)
         .map(normalizeTask)
         .sort((a, b) => {
           const aTime = a.createdAt ? Date.parse(a.createdAt) : Number.NaN;
@@ -447,11 +246,10 @@ export default async function TasksPage() {
           if (aValid && bValid && aTime !== bTime) {
             return aTime - bTime;
           }
-
           return a.sourceIndex - b.sourceIndex;
         });
 
-      const recurringTasks = extractRecurringTasksArray(recurringPayload)
+      const recurringTasks = topLevelArray(recurringPayload)
         .map(normalizeRecurringTask)
         .sort((a, b) => a.sourceIndex - b.sourceIndex);
 
@@ -461,11 +259,9 @@ export default async function TasksPage() {
           recurringTaskToTask(task, tasks.length + index),
         ),
       ];
-
       return { group, tasks: mergedTasks };
     }),
   );
-
   return (
     <div className="prose max-w-none p-4 sm:p-6">
       <h1 className="inline-block w-full border-b-2 border-current pb-1 text-2xl font-extrabold">

@@ -36,9 +36,6 @@ type TaskItem = {
   description?: string;
   createdAt?: string;
   isRecurring?: boolean;
-  notStartedAssignments?: number;
-  inProgressAssignments?: number;
-  completedAssignments?: number;
   sourceIndex: number;
 };
 
@@ -47,9 +44,8 @@ type RecurringTaskItem = {
   name: string;
   point?: string;
   description?: string;
-  scheduleType: "weekly" | "every_n_days" | "";
+  scheduleType: "weekly" | "biweekly" | "";
   dayOfWeek?: string;
-  intervalDays?: string;
   startsOn?: string;
   active: boolean;
   sourceIndex: number;
@@ -104,6 +100,7 @@ type TaskCardItem = {
 const normalizeText = (value?: string) => (value ?? "").trim().toLowerCase();
 
 const APP_TIME_ZONE = process.env.APP_TIME_ZONE ?? "Asia/Tokyo";
+const RECENT_EVALUATED_TASK_LIMIT = 6;
 
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -135,12 +132,6 @@ const pickFirstString = (
 
 const unwrapEntity = (value: AnyRecord | null) =>
   asRecord(value?.attributes) ?? asRecord(value?.data) ?? value;
-
-const pickFromSources = (
-  sourceA: AnyRecord | null,
-  sourceB: AnyRecord | null,
-  keys: string[],
-) => pickFirstString(sourceA, keys) ?? pickFirstString(sourceB, keys);
 
 const pickRelationshipId = (
   source: AnyRecord | null,
@@ -177,161 +168,28 @@ const pickRelationshipId = (
   return undefined;
 };
 
-const firstArray = (...values: unknown[]): unknown[] => {
-  for (const value of values) {
-    if (Array.isArray(value)) {
-      return value;
-    }
+const dataArray = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
   }
-  return [];
+
+  const root = asRecord(payload);
+  return Array.isArray(root?.data) ? root.data : [];
 };
 
-const toNonNegativeInt = (value: unknown) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, Math.trunc(value));
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return Math.max(0, Math.trunc(parsed));
-    }
-  }
-  return undefined;
-};
-
-const collectObjectRecords = (value: unknown, bucket: AnyRecord[]) => {
-  const record = asRecord(value);
-  if (!record) {
-    return;
-  }
-
-  bucket.push(record);
-  for (const child of Object.values(record)) {
-    if (Array.isArray(child)) {
-      for (const item of child) {
-        collectObjectRecords(item, bucket);
-      }
-      continue;
-    }
-    collectObjectRecords(child, bucket);
-  }
-};
-
-const normalizeCountKey = (key: string) =>
-  normalizeText(key).replace(/[\s-]/g, "");
-
-const extractTaskStatusCounts = (payload: unknown): TaskStatusCounts | null => {
-  const records: AnyRecord[] = [];
-  collectObjectRecords(payload, records);
-
-  let best: (TaskStatusCounts & { score: number; sum: number }) | null = null;
-
-  for (const record of records) {
-    let notStarted = 0;
-    let inProgress = 0;
-    let completed = 0;
-    let score = 0;
-
-    for (const [key, rawValue] of Object.entries(record)) {
-      const value = toNonNegativeInt(rawValue);
-      if (value === undefined) {
-        continue;
-      }
-
-      const normalizedKey = normalizeCountKey(key);
-
-      if (
-        normalizedKey === "not_started" ||
-        normalizedKey === "not_started_assignments" ||
-        normalizedKey === "notstartedassignment" ||
-        normalizedKey === "notstartedassignments" ||
-        normalizedKey === "not_started_count" ||
-        normalizedKey === "notstartedcount" ||
-        normalizedKey === "notstarted" ||
-        normalizedKey === "todo" ||
-        normalizedKey === "todocount" ||
-        normalizedKey === "pending" ||
-        normalizedKey === "unstarted" ||
-        normalizedKey === "着手前"
-      ) {
-        notStarted = value;
-        score += 1;
-        continue;
-      }
-
-      if (
-        normalizedKey === "in_progress" ||
-        normalizedKey === "in_progress_assignments" ||
-        normalizedKey === "inprogressassignment" ||
-        normalizedKey === "inprogressassignments" ||
-        normalizedKey === "in_progress_count" ||
-        normalizedKey === "inprogresscount" ||
-        normalizedKey === "inprogress" ||
-        normalizedKey === "doing" ||
-        normalizedKey === "working" ||
-        normalizedKey === "進行中"
-      ) {
-        inProgress = value;
-        score += 1;
-        continue;
-      }
-
-      if (
-        normalizedKey === "completed" ||
-        normalizedKey === "completed_assignments" ||
-        normalizedKey === "completedassignment" ||
-        normalizedKey === "completedassignments" ||
-        normalizedKey === "completed_count" ||
-        normalizedKey === "completedcount" ||
-        normalizedKey === "complete" ||
-        normalizedKey === "done" ||
-        normalizedKey === "finished" ||
-        normalizedKey === "完了" ||
-        normalizedKey === "完了済み" ||
-        normalizedKey === "済"
-      ) {
-        completed = value;
-        score += 1;
-      }
-    }
-
-    if (score === 0) {
-      continue;
-    }
-
-    const candidate = {
-      notStarted,
-      inProgress,
-      completed,
-      score,
-      sum: notStarted + inProgress + completed,
-    };
-
-    if (
-      !best ||
-      candidate.score > best.score ||
-      (candidate.score === best.score && candidate.sum > best.sum)
-    ) {
-      best = candidate;
-    }
-  }
-
-  if (!best) {
-    return null;
-  }
-
-  return {
-    notStarted: best.notStarted,
-    inProgress: best.inProgress,
-    completed: best.completed,
-  };
-};
+const topLevelArray = (payload: unknown): unknown[] =>
+  Array.isArray(payload) ? payload : [];
 
 const toTimestamp = (value?: string) => {
   if (!value) {
     return Number.NEGATIVE_INFINITY;
   }
   const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+};
+
+const toNumericId = (value?: string) => {
+  const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 };
 
@@ -343,23 +201,9 @@ const todayYmd = () =>
 const normalizeAssignMode = (
   value?: string,
 ): "manual" | "random" | "balanced" | "" => {
-  const normalized = normalizeText(value);
-
-  if (!normalized) {
-    return "";
-  }
-
-  if (normalized.includes("バランス") || normalized.includes("balanced")) {
-    return "balanced";
-  }
-  if (normalized.includes("random") || normalized.includes("ランダム")) {
-    return "random";
-  }
-  if (normalized.includes("manual") || normalized.includes("手動")) {
-    return "manual";
-  }
-
-  return "";
+  return value === "manual" || value === "random" || value === "balanced"
+    ? value
+    : "";
 };
 
 const isSameDay = (isoLike?: string, ymd?: string) => {
@@ -510,33 +354,7 @@ const taskAssignmentKey = (task: TaskItem) =>
   normalizeText(task.id ?? `${task.name}:${task.sourceIndex}`);
 
 const extractGroupsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.groups,
-    root.memberships,
-    root.data,
-    root.items,
-    root.results,
-    rootData?.groups,
-    rootData?.memberships,
-    rootData?.items,
-    rootData?.results,
-    rootDataData?.groups,
-    rootDataData?.memberships,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
+  return dataArray(payload);
 };
 
 const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
@@ -545,32 +363,22 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
   for (const payload of payloads) {
     for (const row of extractGroupsArray(payload)) {
       const root = asRecord(row);
-      const source = asRecord(root?.group) ?? root;
-      const group = unwrapEntity(source);
-      const base = unwrapEntity(root);
-
-      const id = pickFromSources(group, base, ["id", "group_id", "groupId"]);
-      const name =
-        pickFromSources(group, base, ["name"]) ??
-        pickFromSources(source, root, ["name"]);
+      const group = unwrapEntity(root);
+      const id = pickFirstString(group, ["id"]);
+      const name = pickFirstString(group, ["name"]);
 
       if (!name) {
         continue;
       }
-
-      const createdAt = pickFromSources(group, base, [
-        "created_at",
-        "createdAt",
-      ]);
 
       const key = id ? `id:${id}` : `name:${name}`;
       if (!map.has(key)) {
         map.set(key, {
           id,
           name,
-          createdAt,
+          createdAt: pickFirstString(group, ["created_at"]),
           assignMode: normalizeAssignMode(
-            pickFromSources(group, base, ["assign_mode", "assignMode", "mode"]),
+            pickFirstString(group, ["assign_mode"]),
           ),
         });
       }
@@ -581,40 +389,7 @@ const normalizeGroups = (payloads: unknown[]): GroupItem[] => {
 };
 
 const extractMembershipsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  return firstArray(
-    root.memberships,
-    root.groups,
-    root.data,
-    root.items,
-    root.results,
-    root.rows,
-    root.list,
-    rootData?.memberships,
-    rootData?.groups,
-    rootData?.data,
-    rootData?.items,
-    rootData?.results,
-    rootData?.rows,
-    rootData?.list,
-    rootDataData?.memberships,
-    rootDataData?.groups,
-    rootDataData?.items,
-    rootDataData?.results,
-    rootDataData?.rows,
-    rootDataData?.list,
-  );
+  return dataArray(payload);
 };
 
 const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
@@ -624,71 +399,17 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
     for (const row of extractMembershipsArray(payload)) {
       const membershipRoot = asRecord(row);
       const membership = unwrapEntity(membershipRoot);
-      const membershipSource = membershipRoot ?? membership;
-      const group =
-        unwrapEntity(asRecord(membershipRoot?.group)) ??
-        unwrapEntity(asRecord(membership?.group));
-
-      const groupId =
-        pickFromSources(group, membership, ["id", "group_id", "groupId"]) ??
-        pickRelationshipId(membershipSource, ["group", "groups"]) ??
-        pickFirstString(membershipRoot, ["group_id", "groupId"]);
-      const groupName =
-        pickFromSources(group, membership, ["name", "group_name"]) ??
-        pickFirstString(membershipRoot, ["group_name", "name"]);
-
-      const candidateMember =
-        unwrapEntity(asRecord(membershipRoot?.member)) ??
-        unwrapEntity(asRecord(membershipRoot?.user)) ??
-        unwrapEntity(asRecord(membership?.member)) ??
-        unwrapEntity(asRecord(membership?.user)) ??
-        unwrapEntity(asRecord(membershipRoot?.account)) ??
-        unwrapEntity(asRecord(membership?.account));
 
       normalized.push({
-        id: pickFromSources(membership, membershipRoot, [
-          "id",
-          "membership_id",
-          "membershipId",
-        ]),
-        groupId,
-        groupName,
+        id: pickFirstString(membershipRoot, ["id"]),
+        groupId:
+          pickFirstString(membership, ["group_id"]) ??
+          pickRelationshipId(membershipRoot, ["group"]),
         member: {
           id:
-            pickFromSources(candidateMember, membership, [
-              "id",
-              "member_id",
-              "user_id",
-              "userId",
-            ]) ??
-            pickRelationshipId(membershipSource, [
-              "member",
-              "user",
-              "account",
-            ]) ??
-            pickFirstString(membershipRoot, ["member_id", "user_id", "userId"]),
-          name:
-            pickFromSources(candidateMember, membership, [
-              "name",
-              "member_name",
-              "user_name",
-              "display_name",
-              "displayName",
-              "nickname",
-            ]) ??
-            pickFirstString(membershipRoot, [
-              "name",
-              "member_name",
-              "user_name",
-              "display_name",
-              "displayName",
-              "nickname",
-            ]),
-          email: pickFromSources(candidateMember, membership, [
-            "email",
-            "mail",
-            "member_email",
-          ]),
+            pickRelationshipId(membershipRoot, ["user"]) ??
+            pickFirstString(membership, ["user_id"]),
+          name: pickFirstString(membership, ["user_name"]),
         },
       });
     }
@@ -698,137 +419,23 @@ const normalizeMemberships = (payloads: unknown[]): MembershipItem[] => {
 };
 
 const extractTasksArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-  const rootTask = asRecord(root.task);
-
-  return firstArray(
-    root.tasks,
-    root.items,
-    root.results,
-    root.data,
-    rootTask?.items,
-    rootTask?.tasks,
-    rootData?.tasks,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.tasks,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
+  return dataArray(payload);
 };
 
 const extractRecurringTasksArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-  const rootRecurring = asRecord(root.recurring_task);
-
-  return firstArray(
-    root.recurring_tasks,
-    root.items,
-    root.results,
-    root.data,
-    rootRecurring?.items,
-    rootRecurring?.recurring_tasks,
-    rootData?.recurring_tasks,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.recurring_tasks,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
+  return topLevelArray(payload);
 };
 
 const normalizeTask = (row: unknown, index: number): TaskItem => {
-  const root = asRecord(row);
-  const taskRoot = asRecord(root?.task) ?? root;
-  const task = unwrapEntity(taskRoot);
+  const resource = asRecord(row);
+  const task = unwrapEntity(resource);
 
   return {
-    id:
-      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
-      pickFirstString(root, ["id", "task_id", "taskId"]),
-    name:
-      pickFromSources(task, taskRoot, ["name", "title", "task_name"]) ??
-      `タスク ${index + 1}`,
-    point: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    description: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
-    createdAt: pickFromSources(task, taskRoot, ["created_at", "createdAt"]),
-    notStartedAssignments:
-      toNonNegativeInt(
-        pickFromSources(task, taskRoot, [
-          "not_started_assignments",
-          "notStartedAssignments",
-          "not_started_count",
-          "notStartedCount",
-        ]),
-      ) ??
-      toNonNegativeInt(
-        pickFirstString(root, [
-          "not_started_assignments",
-          "notStartedAssignments",
-          "not_started_count",
-          "notStartedCount",
-        ]),
-      ),
-    inProgressAssignments:
-      toNonNegativeInt(
-        pickFromSources(task, taskRoot, [
-          "in_progress_assignments",
-          "inProgressAssignments",
-          "in_progress_count",
-          "inProgressCount",
-        ]),
-      ) ??
-      toNonNegativeInt(
-        pickFirstString(root, [
-          "in_progress_assignments",
-          "inProgressAssignments",
-          "in_progress_count",
-          "inProgressCount",
-        ]),
-      ),
-    completedAssignments:
-      toNonNegativeInt(
-        pickFromSources(task, taskRoot, [
-          "completed_assignments",
-          "completedAssignments",
-          "completed_count",
-          "completedCount",
-        ]),
-      ) ??
-      toNonNegativeInt(
-        pickFirstString(root, [
-          "completed_assignments",
-          "completedAssignments",
-          "completed_count",
-          "completedCount",
-        ]),
-      ),
+    id: pickFirstString(resource, ["id"]),
+    name: pickFirstString(task, ["name"]) ?? `タスク ${index + 1}`,
+    point: pickFirstString(task, ["point"]),
+    description: pickFirstString(task, ["description"]),
+    createdAt: pickFirstString(task, ["scheduled_for"]),
     sourceIndex: index,
   };
 };
@@ -837,62 +444,25 @@ const normalizeRecurringTask = (
   row: unknown,
   index: number,
 ): RecurringTaskItem => {
-  const root = asRecord(row);
-  const recurringRoot = asRecord(root?.recurring_task) ?? root;
-  const recurring = unwrapEntity(recurringRoot);
-
-  const scheduleTypeRaw =
-    pickFromSources(recurring, recurringRoot, [
-      "schedule_type",
-      "scheduleType",
-    ]) ?? "";
-  const scheduleTypeNormalized = normalizeText(scheduleTypeRaw);
+  const recurring = asRecord(row);
+  const scheduleTypeRaw = pickFirstString(recurring, ["schedule_type"]) ?? "";
 
   const scheduleType: RecurringTaskItem["scheduleType"] =
-    scheduleTypeNormalized === "weekly" ||
-    scheduleTypeNormalized === "week" ||
-    scheduleTypeNormalized === "every_week"
+    scheduleTypeRaw === "weekly"
       ? "weekly"
-      : scheduleTypeNormalized === "every_n_days" ||
-          scheduleTypeNormalized === "everyndays"
-        ? "every_n_days"
+      : scheduleTypeRaw === "biweekly"
+        ? "biweekly"
         : "";
 
-  const activeRaw = pickFromSources(recurring, recurringRoot, ["active"]);
-  const active =
-    activeRaw == null ? true : activeRaw === "true" || activeRaw === "1";
-
   return {
-    id:
-      pickFromSources(recurring, recurringRoot, ["id", "recurring_task_id"]) ??
-      pickFirstString(root, ["id", "recurring_task_id"]),
-    name:
-      pickFromSources(recurring, recurringRoot, ["name", "title"]) ??
-      `周期タスク ${index + 1}`,
-    point: pickFromSources(recurring, recurringRoot, [
-      "point",
-      "score",
-      "value",
-    ]),
-    description: pickFromSources(recurring, recurringRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
+    id: pickFirstString(recurring, ["id"]),
+    name: pickFirstString(recurring, ["name"]) ?? `周期タスク ${index + 1}`,
+    point: pickFirstString(recurring, ["point"]),
+    description: pickFirstString(recurring, ["description"]),
     scheduleType,
-    dayOfWeek: pickFromSources(recurring, recurringRoot, [
-      "day_of_week",
-      "dayOfWeek",
-    ]),
-    intervalDays: pickFromSources(recurring, recurringRoot, [
-      "interval_days",
-      "intervalDays",
-    ]),
-    startsOn: pickFromSources(recurring, recurringRoot, [
-      "starts_on",
-      "startsOn",
-    ]),
-    active,
+    dayOfWeek: pickFirstString(recurring, ["day_of_week"]),
+    startsOn: pickFirstString(recurring, ["starts_on"]),
+    active: recurring?.active === true,
     sourceIndex: index,
   };
 };
@@ -920,43 +490,8 @@ const parseRecurringDayOfWeek = (value?: string) => {
     return undefined;
   }
 
-  const normalized = normalizeText(value).replace("曜日", "");
-  const numeric = Number(normalized);
-
-  if (Number.isInteger(numeric)) {
-    if (numeric >= 0 && numeric <= 6) {
-      return numeric;
-    }
-    if (numeric >= 1 && numeric <= 7) {
-      return numeric % 7;
-    }
-  }
-
-  const map: Record<string, number> = {
-    sun: 0,
-    sunday: 0,
-    日: 0,
-    mon: 1,
-    monday: 1,
-    月: 1,
-    tue: 2,
-    tuesday: 2,
-    火: 2,
-    wed: 3,
-    wednesday: 3,
-    水: 3,
-    thu: 4,
-    thursday: 4,
-    木: 4,
-    fri: 5,
-    friday: 5,
-    金: 5,
-    sat: 6,
-    saturday: 6,
-    土: 6,
-  };
-
-  return map[normalized];
+  const day = Number(value);
+  return Number.isInteger(day) && day >= 0 && day <= 6 ? day : undefined;
 };
 
 const recurringTaskRunsOnDate = (task: RecurringTaskItem, ymd: string) => {
@@ -991,12 +526,8 @@ const recurringTaskRunsOnDate = (task: RecurringTaskItem, ymd: string) => {
     return targetDate.getUTCDay() === day;
   }
 
-  if (task.scheduleType === "every_n_days") {
-    const interval = Number(task.intervalDays);
-    if (!Number.isInteger(interval) || interval <= 0) {
-      return false;
-    }
-    return diffDays % interval === 0;
+  if (task.scheduleType === "biweekly") {
+    return diffDays % 14 === 0;
   }
 
   return false;
@@ -1020,349 +551,36 @@ const recurringTaskToTask = (
 };
 
 const extractAssignmentsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  const directArray = firstArray(
-    root.assignments,
-    root.items,
-    root.results,
-    root.data,
-    rootData?.assignments,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.assignments,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-
-  if (directArray.length > 0) {
-    return directArray;
-  }
-
-  const singleData =
-    asRecord(root.data) ??
-    asRecord(rootData?.data) ??
-    asRecord(rootDataData?.data);
-  if (singleData) {
-    return [singleData];
-  }
-
-  const singleResource =
-    asRecord(root.assignment) ??
-    asRecord(rootData?.assignment) ??
-    asRecord(rootDataData?.assignment);
-  if (singleResource) {
-    return [singleResource];
-  }
-
-  return firstArray(
-    root.assignment,
-    rootData?.assignment,
-    rootDataData?.assignment,
-  );
+  return dataArray(payload);
 };
 
 const normalizeAssignment = (row: unknown): AssignmentItem => {
-  const root = asRecord(row);
-  const assignmentRoot = asRecord(root?.assignment) ?? root;
-  const assignment = unwrapEntity(assignmentRoot);
-  const assignmentSource = assignmentRoot ?? root;
-
-  const taskRoot =
-    asRecord(assignmentRoot?.task) ??
-    asRecord(assignment?.task) ??
-    asRecord(root?.task);
-  const task = unwrapEntity(taskRoot);
-
-  const assigneeRoot =
-    asRecord(assignmentRoot?.assignee) ??
-    asRecord(assignmentRoot?.user) ??
-    asRecord(assignment?.assignee) ??
-    asRecord(assignment?.user);
-  const assignee = unwrapEntity(assigneeRoot);
-
-  const membershipRoot =
-    asRecord(assignmentRoot?.membership) ??
-    asRecord(assignment?.membership) ??
-    asRecord(root?.membership);
-  const membership = unwrapEntity(membershipRoot);
-
-  const membershipMemberRoot =
-    asRecord(membershipRoot?.member) ??
-    asRecord(membershipRoot?.user) ??
-    asRecord(membership?.member) ??
-    asRecord(membership?.user);
-  const membershipMember = unwrapEntity(membershipMemberRoot);
-
-  const evaluationArray = firstArray(
-    assignmentRoot?.evaluations,
-    assignment?.evaluations,
-    root?.evaluations,
-  );
-  const evaluationRoot =
-    asRecord(assignmentRoot?.evaluation) ??
-    asRecord(assignment?.evaluation) ??
-    asRecord(root?.evaluation) ??
-    asRecord(evaluationArray[0]);
-  const evaluation = unwrapEntity(evaluationRoot);
+  const resource = asRecord(row);
+  const assignment = unwrapEntity(resource);
 
   return {
-    id: pickFromSources(assignment, assignmentRoot, ["id", "assignment_id"]),
-    groupId:
-      pickFromSources(assignment, assignmentRoot, ["group_id", "groupId"]) ??
-      pickRelationshipId(assignmentSource, ["group", "groups"]) ??
-      pickFirstString(root, ["group_id", "groupId"]),
+    id: pickFirstString(resource, ["id"]),
+    groupId: pickFirstString(assignment, ["group_id"]),
     taskId:
-      pickFromSources(task, assignment, ["id", "task_id", "taskId"]) ??
-      pickFromSources(assignment, assignmentRoot, ["task_id", "taskId"]) ??
-      pickRelationshipId(assignmentSource, ["task", "tasks"]) ??
-      pickFirstString(root, ["task_id", "taskId"]),
-    taskName: pickFromSources(task, taskRoot, ["name", "title", "task_name"]),
-    taskPoint: pickFromSources(task, taskRoot, ["point", "score", "value"]),
-    taskDescription: pickFromSources(task, taskRoot, [
-      "description",
-      "detail",
-      "memo",
-    ]),
+      pickRelationshipId(resource, ["task"]) ??
+      pickFirstString(assignment, ["task_id"]),
+    taskName: pickFirstString(assignment, ["task_name"]),
     membershipId:
-      pickFromSources(assignment, assignmentRoot, [
-        "membership_id",
-        "membershipId",
-        "group_membership_id",
-        "groupMembershipId",
-      ]) ??
-      pickFromSources(membership, membershipRoot, ["id", "membership_id"]) ??
-      pickRelationshipId(assignmentSource, [
-        "membership",
-        "group_membership",
-      ]) ??
-      pickFirstString(root, [
-        "membership_id",
-        "membershipId",
-        "group_membership_id",
-        "groupMembershipId",
-      ]),
-    status: pickFromSources(assignment, assignmentRoot, ["status", "state"]),
-    createdAt: pickFromSources(assignment, assignmentRoot, [
-      "created_at",
-      "createdAt",
-      "assigned_at",
-      "assignedAt",
-    ]),
-    completedDate: pickFromSources(assignment, assignmentRoot, [
-      "completed_date",
-      "completedDate",
-      "done_at",
-      "doneAt",
-      "finished_at",
-      "finishedAt",
-    ]),
-    completedByUserId:
-      pickFromSources(assignment, assignmentRoot, [
-        "completed_by_user_id",
-        "completedByUserId",
-      ]) ??
-      pickFirstString(root, ["completed_by_user_id", "completedByUserId"]),
-    assigneeId:
-      pickFromSources(assignee, assignment, ["id", "user_id", "userId"]) ??
-      pickFromSources(membershipMember, membership, [
-        "id",
-        "user_id",
-        "userId",
-      ]) ??
-      pickFromSources(assigneeRoot, assignmentRoot, [
-        "assignee_id",
-        "member_id",
-        "executor_id",
-      ]) ??
-      pickRelationshipId(assignmentSource, [
-        "assignee",
-        "user",
-        "member",
-        "executor",
-        "completed_by",
-      ]),
-    assigneeName:
-      pickFromSources(assignee, assignment, ["name"]) ??
-      pickFromSources(membershipMember, membership, ["name"]),
-    assigneeEmail:
-      pickFromSources(assignee, assignment, ["email", "mail"]) ??
-      pickFromSources(membershipMember, membership, ["email", "mail"]),
-    targetDate: pickFromSources(assignment, assignmentRoot, [
-      "date",
-      "target_date",
-      "assigned_date",
-      "work_date",
-    ]),
-    updatedAt: pickFromSources(assignment, assignmentRoot, [
-      "updated_at",
-      "updatedAt",
-      "created_at",
-      "createdAt",
-    ]),
-    evaluationId: pickFromSources(evaluation, evaluationRoot, [
-      "id",
-      "evaluation_id",
-    ]),
-    evaluationScore:
-      pickFromSources(evaluation, evaluationRoot, [
-        "score",
-        "point",
-        "rating",
-      ]) ??
-      pickFromSources(assignment, assignmentRoot, [
-        "evaluation_score",
-        "evaluationScore",
-        "score",
-        "point",
-        "rating",
-      ]),
-    evaluationComment:
-      pickFromSources(evaluation, evaluationRoot, [
-        "feedback",
-        "comment",
-        "body",
-        "memo",
-      ]) ??
-      pickFromSources(assignment, assignmentRoot, [
-        "feedback",
-        "evaluation_comment",
-        "evaluationComment",
-        "comment",
-        "body",
-        "memo",
-      ]),
-    evaluatedAt:
-      pickFromSources(evaluation, evaluationRoot, [
-        "created_at",
-        "createdAt",
-        "evaluated_at",
-        "evaluatedAt",
-        "updated_at",
-        "updatedAt",
-      ]) ??
-      pickFromSources(assignment, assignmentRoot, [
-        "evaluated_at",
-        "evaluatedAt",
-        "evaluation_created_at",
-        "evaluationCreatedAt",
-        "evaluation_updated_at",
-        "evaluationUpdatedAt",
-      ]),
+      pickRelationshipId(resource, ["membership"]) ??
+      pickFirstString(assignment, ["membership_id"]),
+    status: pickFirstString(assignment, ["status"]),
+    createdAt: pickFirstString(assignment, ["assigned_at"]),
+    completedDate: pickFirstString(assignment, ["completed_date"]),
+    completedByUserId: pickFirstString(assignment, ["completed_by_user_id"]),
+    assigneeId: pickFirstString(assignment, ["assigned_to_id"]),
+    assigneeName: pickFirstString(assignment, ["assigned_to_name"]),
+    targetDate: pickFirstString(assignment, ["due_date"]),
+    updatedAt: pickFirstString(assignment, ["updated_at", "assigned_at"]),
   };
 };
 
 const extractEvaluationsArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const root = asRecord(payload);
-  if (!root) {
-    return [];
-  }
-
-  const rootData = asRecord(root.data);
-  const rootDataData = asRecord(rootData?.data);
-
-  const directArray = firstArray(
-    root.evaluations,
-    root.items,
-    root.results,
-    root.data,
-    rootData?.evaluations,
-    rootData?.items,
-    rootData?.results,
-    rootData?.data,
-    rootDataData?.evaluations,
-    rootDataData?.items,
-    rootDataData?.results,
-  );
-
-  if (directArray.length > 0) {
-    return directArray;
-  }
-
-  const singleData =
-    asRecord(root.data) ??
-    asRecord(rootData?.data) ??
-    asRecord(rootDataData?.data);
-  if (singleData) {
-    return [singleData];
-  }
-
-  const singleEvaluation =
-    asRecord(root.evaluation) ??
-    asRecord(rootData?.evaluation) ??
-    asRecord(rootDataData?.evaluation);
-  if (singleEvaluation) {
-    return [singleEvaluation];
-  }
-
-  return [];
-};
-
-const extractAssignmentsFromTaskRows = (
-  taskRows: unknown[],
-  groupId?: string,
-): AssignmentItem[] => {
-  const collected: AssignmentItem[] = [];
-
-  for (const row of taskRows) {
-    const root = asRecord(row);
-    const taskRoot = asRecord(root?.task) ?? root;
-    const task = unwrapEntity(taskRoot);
-
-    const taskId =
-      pickFromSources(task, taskRoot, ["id", "task_id", "taskId"]) ??
-      pickFirstString(root, ["id", "task_id", "taskId"]);
-    const taskName =
-      pickFromSources(task, taskRoot, ["name", "title", "task_name"]) ??
-      pickFirstString(root, ["name", "title", "task_name"]);
-
-    const nestedAssignments = firstArray(
-      root?.assignments,
-      taskRoot?.assignments,
-      task?.assignments,
-      asRecord(root?.data)?.assignments,
-      asRecord(taskRoot?.data)?.assignments,
-    );
-
-    const nestedSingleAssignment =
-      asRecord(root?.assignment) ??
-      asRecord(taskRoot?.assignment) ??
-      asRecord(task?.assignment) ??
-      asRecord(asRecord(root?.data)?.assignment) ??
-      asRecord(asRecord(taskRoot?.data)?.assignment);
-
-    const rawAssignments = [...nestedAssignments];
-    if (nestedSingleAssignment) {
-      rawAssignments.push(nestedSingleAssignment);
-    }
-
-    for (const rawAssignment of rawAssignments) {
-      const normalized = normalizeAssignment(rawAssignment);
-      collected.push({
-        ...normalized,
-        groupId: normalized.groupId ?? groupId,
-        taskId: normalized.taskId ?? taskId,
-        taskName: normalized.taskName ?? taskName,
-      });
-    }
-  }
-
-  return collected;
+  return dataArray(payload);
 };
 
 const uniqueAssignmentsByKey = (assignments: AssignmentItem[]) => {
@@ -1441,38 +659,17 @@ const membershipBelongsToGroup = (
 
 const isCompletedStatus = (status?: string) => {
   const normalized = normalizeText(status);
-  return (
-    normalized === "completed" ||
-    normalized === "complete" ||
-    normalized === "done" ||
-    normalized === "finished" ||
-    normalized === "完了" ||
-    normalized === "完了済み" ||
-    normalized === "済"
-  );
+  return normalized === "completed";
 };
 
 const isInProgressStatus = (status?: string) => {
   const normalized = normalizeText(status);
-  return (
-    normalized === "in_progress" ||
-    normalized === "in progress" ||
-    normalized === "doing" ||
-    normalized === "working" ||
-    normalized === "進行中"
-  );
+  return normalized === "in_progress";
 };
 
 const isNotStartedStatus = (status?: string) => {
   const normalized = normalizeText(status);
-  return (
-    normalized === "not_started" ||
-    normalized === "not started" ||
-    normalized === "todo" ||
-    normalized === "pending" ||
-    normalized === "unstarted" ||
-    normalized === "着手前"
-  );
+  return normalized === "着手前" || normalized === "not_started";
 };
 
 const isCompletedAssignment = (assignment: AssignmentItem) => {
@@ -1506,19 +703,6 @@ const getTaskSummary = (
   task: TaskItem,
   assignmentsByTaskId: Map<string, AssignmentItem[]>,
 ): TaskStatusCounts => {
-  const hasSerializerCounts =
-    typeof task.notStartedAssignments === "number" ||
-    typeof task.inProgressAssignments === "number" ||
-    typeof task.completedAssignments === "number";
-
-  if (hasSerializerCounts) {
-    return {
-      notStarted: task.notStartedAssignments ?? 0,
-      inProgress: task.inProgressAssignments ?? 0,
-      completed: task.completedAssignments ?? 0,
-    };
-  }
-
   const taskIdKey = normalizeText(task.id);
   const taskNameKey = normalizeText(task.name);
   const assignments =
@@ -1605,39 +789,15 @@ const getMyTaskStatus = (
 
 const extractCurrentUserIdentity = (payload: unknown): MemberItem => {
   const root = asRecord(payload);
-  const userRoot =
-    asRecord(root?.user) ??
-    asRecord(root?.member) ??
-    asRecord(root?.account) ??
-    asRecord(root?.data) ??
-    root;
-  const user = unwrapEntity(userRoot);
+  const user = unwrapEntity(asRecord(root?.data) ?? root);
 
   return {
-    id: pickFromSources(user, userRoot, [
-      "id",
-      "user_id",
-      "userId",
-      "member_id",
-    ]),
-    name: pickFromSources(user, userRoot, ["name"]),
-    email: pickFromSources(user, userRoot, ["email", "mail", "member_email"]),
+    id:
+      pickFirstString(asRecord(root?.data), ["id"]) ??
+      pickFirstString(user, ["id"]),
+    name: pickFirstString(user, ["name"]),
+    email: pickFirstString(user, ["email"]),
   };
-};
-
-const fetchFirstOkJson = async (
-  urls: string[],
-  fetchOkJson: (url: string) => Promise<unknown | null>,
-) => {
-  const uniqueUrls = Array.from(new Set(urls));
-
-  for (const url of uniqueUrls) {
-    const data = await fetchOkJson(url);
-    if (data != null) {
-      return data;
-    }
-  }
-  return null;
 };
 
 export default async function Home() {
@@ -1666,92 +826,35 @@ export default async function Home() {
         Authorization: `Bearer ${idToken}`,
       },
       cache: "no-store",
-    }).catch((error) => {
-      console.error("[dashboard] fetch failed", {
-        url,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    });
+    }).catch(() => null);
 
     if (!res?.ok) {
       if (res && isGuestSession && isGuestSessionExpiredStatus(res.status)) {
         redirect(GUEST_EXPIRED_REDIRECT_PATH);
       }
 
-      console.warn("[dashboard] fetch non-ok", {
-        url,
-        status: res?.status ?? "no-response",
-      });
       return null;
     }
 
-    const data = await res.json().catch((error) => {
-      console.error("[dashboard] json parse failed", {
-        url,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return null;
-    });
-
-    if (
-      url.includes("/tasks") ||
-      url.includes("/assignments") ||
-      url.includes("/memberships")
-    ) {
-      const root = asRecord(data);
-      console.log("[dashboard] fetch ok", {
-        url,
-        topLevelKeys: root ? Object.keys(root).slice(0, 10) : [],
-        isArray: Array.isArray(data),
-      });
-    }
-
-    return data;
+    return res.json().catch(() => null);
   };
 
   const sessionUserId =
     (session.user as { id?: string } | undefined)?.id ??
     (session.user as { userId?: string } | undefined)?.userId;
 
-  const [
-    groupsV1,
-    groupsLegacy,
-    membershipsV1,
-    membershipsLegacy,
-    meV1,
-    meLegacy,
-    meById,
-    evaluationsV1,
-  ] = await Promise.all([
+  const [groupsV1, membershipsV1, meV1, evaluationsV1] = await Promise.all([
     fetchOkJson(`${v1Base}/groups`),
-    fetchOkJson(`${base}/groups`),
     fetchOkJson(`${v1Base}/memberships`),
-    fetchOkJson(`${base}/memberships`),
     fetchOkJson(`${v1Base}/users/me`),
-    fetchOkJson(`${base}/users/me`),
-    sessionUserId
-      ? fetchOkJson(`${v1Base}/users/${encodeURIComponent(sessionUserId)}`)
-      : Promise.resolve(null),
     fetchOkJson(`${v1Base}/evaluations`),
   ]);
 
-  const groups = normalizeGroups([
-    groupsV1,
-    groupsLegacy,
-    membershipsV1,
-    membershipsLegacy,
-  ]);
-  const memberships = normalizeMemberships([membershipsV1, membershipsLegacy]);
+  const groups = normalizeGroups([groupsV1]);
+  const memberships = normalizeMemberships([membershipsV1]);
 
   const meFromV1 = extractCurrentUserIdentity(meV1);
-  const meFromLegacy = extractCurrentUserIdentity(meLegacy);
-  const meFromById = extractCurrentUserIdentity(meById);
-  const currentUserFromApi = hasMemberIdentity(meFromV1)
-    ? meFromV1
-    : hasMemberIdentity(meFromLegacy)
-      ? meFromLegacy
-      : meFromById;
+  const currentUserFromApi = meFromV1;
 
   const currentUser: MemberItem = {
     id:
@@ -1770,13 +873,6 @@ export default async function Home() {
   const selfEmails = new Set(
     [currentUser.email, session.user?.email]
       .map((value) => (typeof value === "string" ? normalizeText(value) : ""))
-      .filter((value) => value.length > 0),
-  );
-
-  const myMembershipIds = new Set(
-    memberships
-      .filter((membership) => isSameMember(membership.member, currentUser))
-      .map((membership) => normalizeText(membership.id))
       .filter((value) => value.length > 0),
   );
 
@@ -1816,7 +912,6 @@ export default async function Home() {
   const groupTaskRows: {
     rows: DashboardTaskRow[];
     assignedToCurrentCount: number;
-    serializerStatusCounts: TaskStatusCounts | null;
     taskCards: TaskCardItem[];
   }[] = await Promise.all(
     groups.map(async (group) => {
@@ -1824,38 +919,17 @@ export default async function Home() {
         return {
           rows: [] as DashboardTaskRow[],
           assignedToCurrentCount: 0,
-          serializerStatusCounts: null as TaskStatusCounts | null,
           taskCards: [] as TaskCardItem[],
         };
       }
 
-      const tasksPayload = await fetchFirstOkJson(
-        [
-          `${v1Base}/groups/${encodeURIComponent(group.id)}/tasks`,
-          `${base}/groups/${encodeURIComponent(group.id)}/tasks`,
-          `${v1Base}/tasks?group_id=${encodeURIComponent(group.id)}`,
-          `${base}/tasks?group_id=${encodeURIComponent(group.id)}`,
-        ],
-        fetchOkJson,
-      );
-
-      const recurringPayload = await fetchFirstOkJson(
-        [
-          `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
-          `${base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
-        ],
-        fetchOkJson,
-      );
-
-      const assignmentsPayload = await fetchFirstOkJson(
-        [
-          `${v1Base}/groups/${encodeURIComponent(group.id)}/assignments`,
-          `${base}/groups/${encodeURIComponent(group.id)}/assignments`,
-          `${v1Base}/assignments?group_id=${encodeURIComponent(group.id)}`,
-          `${base}/assignments?group_id=${encodeURIComponent(group.id)}`,
-        ],
-        fetchOkJson,
-      );
+      const groupId = encodeURIComponent(group.id);
+      const [tasksPayload, recurringPayload, assignmentsPayload] =
+        await Promise.all([
+          fetchOkJson(`${v1Base}/groups/${groupId}/tasks`),
+          fetchOkJson(`${v1Base}/groups/${groupId}/recurring_tasks`),
+          fetchOkJson(`${v1Base}/groups/${groupId}/assignments`),
+        ]);
 
       const taskRows = extractTasksArray(tasksPayload);
       const todayKey = todayYmd();
@@ -1867,178 +941,11 @@ export default async function Home() {
           recurringTaskToTask(task, normalTasks.length + index),
         );
       const tasks = sortTasksForAssignment([...normalTasks, ...recurringTasks]);
-      const taskIdList = tasks
-        .filter((task) => !task.isRecurring)
-        .map((task) => task.id)
-        .filter((taskId): taskId is string => Boolean(taskId));
-
-      const taskAssignmentsPayloads = await Promise.all(
-        taskIdList.map((taskId) =>
-          fetchFirstOkJson(
-            [
-              `${v1Base}/tasks/${encodeURIComponent(taskId)}/assignments`,
-              `${base}/tasks/${encodeURIComponent(taskId)}/assignments`,
-            ],
-            fetchOkJson,
-          ),
-        ),
-      );
-      const completedAssignmentsFromTaskRows: number = taskRows.reduce<number>(
-        (sum, row) => {
-          const root = asRecord(row);
-          const taskRoot = asRecord(root?.task) ?? root;
-          const task = unwrapEntity(taskRoot);
-
-          const value =
-            toNonNegativeInt(
-              pickFromSources(task, taskRoot, [
-                "completed_assignments",
-                "completedAssignments",
-                "completed_count",
-                "completedCount",
-              ]),
-            ) ??
-            toNonNegativeInt(
-              pickFirstString(root, [
-                "completed_assignments",
-                "completedAssignments",
-                "completed_count",
-                "completedCount",
-              ]),
-            ) ??
-            0;
-
-          return sum + value;
-        },
-        0,
-      );
-
-      const notStartedAssignmentsFromTaskRows: number = taskRows.reduce<number>(
-        (sum, row) => {
-          const root = asRecord(row);
-          const taskRoot = asRecord(root?.task) ?? root;
-          const task = unwrapEntity(taskRoot);
-
-          const value =
-            toNonNegativeInt(
-              pickFromSources(task, taskRoot, [
-                "not_started_assignments",
-                "notStartedAssignments",
-                "not_started_count",
-                "notStartedCount",
-                "着手前_assignments",
-                "着手前_count",
-              ]),
-            ) ??
-            toNonNegativeInt(
-              pickFirstString(root, [
-                "not_started_assignments",
-                "notStartedAssignments",
-                "not_started_count",
-                "notStartedCount",
-                "着手前_assignments",
-                "着手前_count",
-              ]),
-            ) ??
-            0;
-
-          return sum + value;
-        },
-        0,
-      );
-
-      const inProgressAssignmentsFromTaskRows: number = taskRows.reduce<number>(
-        (sum, row) => {
-          const root = asRecord(row);
-          const taskRoot = asRecord(root?.task) ?? root;
-          const task = unwrapEntity(taskRoot);
-
-          const value =
-            toNonNegativeInt(
-              pickFromSources(task, taskRoot, [
-                "in_progress_assignments",
-                "inProgressAssignments",
-                "in_progress_count",
-                "inProgressCount",
-              ]),
-            ) ??
-            toNonNegativeInt(
-              pickFirstString(root, [
-                "in_progress_assignments",
-                "inProgressAssignments",
-                "in_progress_count",
-                "inProgressCount",
-              ]),
-            ) ??
-            0;
-
-          return sum + value;
-        },
-        0,
-      );
-
-      const serializerStatusBase = extractTaskStatusCounts(tasksPayload);
-      const serializerStatusCounts: TaskStatusCounts | null =
-        serializerStatusBase
-          ? {
-              ...serializerStatusBase,
-              notStarted: Math.max(
-                serializerStatusBase.notStarted,
-                notStartedAssignmentsFromTaskRows,
-              ),
-              inProgress: Math.max(
-                serializerStatusBase.inProgress,
-                inProgressAssignmentsFromTaskRows,
-              ),
-              completed: Math.max(
-                serializerStatusBase.completed,
-                completedAssignmentsFromTaskRows,
-              ),
-            }
-          : completedAssignmentsFromTaskRows > 0 ||
-              notStartedAssignmentsFromTaskRows > 0 ||
-              inProgressAssignmentsFromTaskRows > 0
-            ? {
-                notStarted: notStartedAssignmentsFromTaskRows,
-                inProgress: inProgressAssignmentsFromTaskRows,
-                completed: completedAssignmentsFromTaskRows,
-              }
-            : null;
-
-      const assignmentsFromTaskEndpoints = taskAssignmentsPayloads.flatMap(
-        (payload, index) => {
-          const taskId = taskIdList[index];
-          const task = tasks.find(
-            (taskItem) => normalizeText(taskItem.id) === normalizeText(taskId),
-          );
-
-          return extractAssignmentsArray(payload)
-            .map(normalizeAssignment)
-            .map((assignment) => ({
-              ...assignment,
-              groupId: assignment.groupId ?? group.id,
-              taskId: assignment.taskId ?? taskId,
-              taskName: assignment.taskName ?? task?.name,
-            }));
-        },
-      );
 
       const tasksForAssignBase = sortTasksForAssignment(tasks);
       const assignments = uniqueAssignmentsByKey([
         ...extractAssignmentsArray(assignmentsPayload).map(normalizeAssignment),
-        ...assignmentsFromTaskEndpoints,
-        ...extractAssignmentsFromTaskRows(taskRows, group.id),
       ]);
-      console.log("[dashboard] group assignment extracted", {
-        groupId: group.id,
-        tasks: tasks.length,
-        fromGroupAssignmentsEndpoint:
-          extractAssignmentsArray(assignmentsPayload).length,
-        fromTaskAssignmentsEndpoints: assignmentsFromTaskEndpoints.length,
-        fromTaskRowsEmbedded: extractAssignmentsFromTaskRows(taskRows, group.id)
-          .length,
-        mergedUnique: assignments.length,
-      });
       const taskById = new Map(
         tasks
           .filter((task) => task.id)
@@ -2292,7 +1199,6 @@ export default async function Home() {
       return {
         rows,
         assignedToCurrentCount,
-        serializerStatusCounts,
         taskCards,
       };
     }),
@@ -2347,131 +1253,21 @@ export default async function Home() {
     .map((row) => {
       const evaluationRoot = asRecord(row);
       const evaluation = unwrapEntity(evaluationRoot);
-
-      const assignmentRoot =
-        asRecord(evaluationRoot?.assignment) ??
-        asRecord(evaluation?.assignment) ??
-        asRecord(asRecord(evaluationRoot?.data)?.assignment) ??
-        asRecord(asRecord(evaluation?.data)?.assignment);
-      const assignment = normalizeAssignment(assignmentRoot ?? row);
-
-      const taskId =
-        pickFromSources(evaluation, evaluationRoot, ["task_id", "taskId"]) ??
-        pickFromSources(unwrapEntity(assignmentRoot), assignmentRoot, [
-          "task_id",
-          "taskId",
-        ]) ??
-        assignment.taskId;
-
-      const assignmentStatus =
-        pickFromSources(evaluation, evaluationRoot, [
-          "assignment_status",
-          "assignmentStatus",
-        ]) ??
-        pickFromSources(unwrapEntity(assignmentRoot), assignmentRoot, [
-          "status",
-          "state",
-        ]) ??
-        assignment.status;
-
-      const evaluatedUserId = pickFromSources(evaluation, evaluationRoot, [
-        "evaluated_user_id",
-        "evaluatedUserId",
-      ]);
-
-      const assignmentEntity = unwrapEntity(assignmentRoot);
-      const membershipRoot =
-        asRecord(assignmentRoot?.membership) ??
-        asRecord(assignmentEntity?.membership);
-      const membership = unwrapEntity(membershipRoot);
-      const membershipUserRoot =
-        asRecord(membershipRoot?.user) ??
-        asRecord(membership?.user) ??
-        asRecord(membershipRoot?.member) ??
-        asRecord(membership?.member);
-      const membershipUser = unwrapEntity(membershipUserRoot);
-
-      const assignmentUserId =
-        pickFromSources(membershipUser, membership, [
-          "user_id",
-          "userId",
-          "id",
-        ]) ?? pickFirstString(evaluationRoot, ["user_id", "userId"]);
-
-      const evaluatorId =
-        pickFromSources(evaluation, evaluationRoot, [
-          "evaluator_id",
-          "evaluatorId",
-        ]) ??
-        pickRelationshipId(evaluationRoot, ["evaluator", "user", "member"]);
+      const assignment: AssignmentItem = {
+        id: pickRelationshipId(evaluationRoot, ["assignment"]),
+        taskId: pickFirstString(evaluation, ["task_id"]),
+        taskName: pickFirstString(evaluation, ["assignment_task_name"]),
+        status: pickFirstString(evaluation, ["assignment_status"]),
+        evaluationId: pickFirstString(evaluationRoot, ["id"]),
+        evaluationScore: pickFirstString(evaluation, ["score"]),
+        evaluationComment: pickFirstString(evaluation, ["feedback"]),
+        evaluatedAt: pickFirstString(evaluation, ["created_at"]),
+      };
 
       return {
-        assignment: {
-          ...assignment,
-          taskId,
-          status: assignmentStatus,
-          evaluationId:
-            assignment.evaluationId ??
-            pickFromSources(evaluation, evaluationRoot, [
-              "id",
-              "evaluation_id",
-              "evaluationId",
-            ]),
-          evaluationScore:
-            assignment.evaluationScore ??
-            pickFromSources(evaluation, evaluationRoot, [
-              "score",
-              "evaluation_score",
-              "evaluationScore",
-              "point",
-              "rating",
-            ]) ??
-            pickFromSources(assignmentEntity, assignmentRoot, [
-              "evaluation_score",
-              "evaluationScore",
-              "score",
-              "point",
-              "rating",
-            ]),
-          evaluationComment:
-            assignment.evaluationComment ??
-            pickFromSources(evaluation, evaluationRoot, [
-              "feedback",
-              "comment",
-              "evaluation_comment",
-              "evaluationComment",
-              "body",
-              "memo",
-            ]) ??
-            pickFromSources(assignmentEntity, assignmentRoot, [
-              "feedback",
-              "evaluation_comment",
-              "evaluationComment",
-              "comment",
-              "body",
-              "memo",
-            ]),
-          evaluatedAt:
-            assignment.evaluatedAt ??
-            pickFromSources(evaluation, evaluationRoot, [
-              "evaluated_at",
-              "evaluatedAt",
-              "created_at",
-              "createdAt",
-              "updated_at",
-              "updatedAt",
-            ]) ??
-            pickFromSources(assignmentEntity, assignmentRoot, [
-              "evaluated_at",
-              "evaluatedAt",
-              "evaluation_created_at",
-              "evaluationCreatedAt",
-              "evaluation_updated_at",
-              "evaluationUpdatedAt",
-            ]),
-        },
-        assignmentUserId: evaluatedUserId ?? assignmentUserId,
-        evaluatorId,
+        assignment,
+        assignmentUserId: pickFirstString(evaluation, ["evaluated_user_id"]),
+        evaluatorId: pickFirstString(evaluation, ["evaluator_id"]),
       };
     })
     .filter(({ assignment, assignmentUserId, evaluatorId }) => {
@@ -2501,7 +1297,13 @@ export default async function Home() {
         toTimestamp(a.assignment.evaluatedAt),
         toTimestamp(a.assignment.updatedAt),
       );
-      return bTime - aTime;
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
+      return (
+        toNumericId(b.assignment.evaluationId) -
+        toNumericId(a.assignment.evaluationId)
+      );
     });
 
   const evaluatedMyExecutedTasks = evaluations
@@ -2529,7 +1331,7 @@ export default async function Home() {
         task,
       };
     })
-    .slice(0, 6);
+    .slice(0, RECENT_EVALUATED_TASK_LIMIT);
 
   const recentGroups = [...groups]
     .sort((a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt))
