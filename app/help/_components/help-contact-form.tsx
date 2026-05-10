@@ -1,8 +1,8 @@
 "use client";
-
 import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 
+// 入力値を正規化
 export default function HelpContactForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

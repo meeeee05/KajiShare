@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import AssignmentStatusButton from "@/components/assignment-status-button";
+import AssignmentStatusButton from "./_components/assignment-status-button";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
   isGuestSessionExpiredStatus,

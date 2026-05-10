@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import Link from "next/link";
-import GroupLeaveLink from "@/components/group-leave-link";
-import GroupEditableField from "../../components/group-editable-field";
+import GroupEditableField from "./_components/group-editable-field";
+import GroupLeaveLink from "./_components/group-leave-link";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
   isGuestSessionExpiredStatus,

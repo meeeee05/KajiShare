@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import RecurringTaskManager from "@/components/recurring-task-panel";
+import RecurringTaskManager from "./_components/recurring-task-panel";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
   isGuestSessionExpiredStatus,

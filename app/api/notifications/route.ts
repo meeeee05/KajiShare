@@ -12,7 +12,6 @@ const parseLimit = (rawLimit: string | null): number => {
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return DEFAULT_LIMIT;
   }
-
   return Math.min(Math.floor(parsed), MAX_LIMIT);
 };
 

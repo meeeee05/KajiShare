@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import AssignmentEvaluationForm from "@/components/assignment-evaluation-form";
+import AssignmentEvaluationForm from "./_components/assignment-evaluation-form";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
   isGuestSessionExpiredStatus,

@@ -1,44 +1,65 @@
 "use client";
 
 import { useState } from "react";
-import { signOut } from "next-auth/react";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type Props = {
   apiUrl?: string;
+};
+type SessionUser = {
+  id?: string | number;
+  idToken?: string;
+};
+type DeleteResult = {
+  ok: boolean;
+  error?: string;
+};
+
+const defaultError = "アカウント削除に失敗しました。";
+
+// APIからのエラーメッセージを取得
+const pickErrorMessage = (payload: unknown, status: number): string => {
+  const data =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : null;
+
+  if (typeof data?.error === "string" && data.error) {
+    return data.error;
+  }
+  if (typeof data?.message === "string" && data.message) {
+    return data.message;
+  }
+  return `${defaultError}(status: ${status})`;
 };
 
 export default function AccountDeleteButton({ apiUrl }: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: session } = useSession();
+  const sessionUser = session?.user as SessionUser | undefined;
 
-  const callDeleteApi = async () => {
-    const token = (session?.user as any)?.idToken as string | undefined;
-    const userId = (session?.user as any)?.id as string | number | undefined;
+  const callDeleteApi = async (): Promise<DeleteResult> => {
+    const token = sessionUser?.idToken;
+    const userId = sessionUser?.id;
     const base = apiUrl?.replace(/\/+$/, "");
 
     if (!base || !token) {
       return { ok: false, error: "認証情報が不足しています。" };
     }
 
-    const endpoints: Array<{ method: "DELETE"; url: string }> = [
-      { method: "DELETE", url: `${base}/users/me` },
-    ];
-
-    if (userId != null) {
-      endpoints.push({
-        method: "DELETE",
-        url: `${base}/users/${encodeURIComponent(String(userId))}`,
-      });
-    }
-
-    let lastError = "アカウント削除に失敗しました。";
+    const endpoints = [
+      `${base}/users/me`,
+      userId != null
+        ? `${base}/users/${encodeURIComponent(String(userId))}`
+        : undefined,
+    ].filter((url): url is string => Boolean(url));
+    let lastError = defaultError;
 
     for (const endpoint of endpoints) {
-      const res = await fetch(endpoint.url, {
-        method: endpoint.method,
+      const res = await fetch(endpoint, {
+        method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -47,13 +68,13 @@ export default function AccountDeleteButton({ apiUrl }: Props) {
       if (
         await handleGuestSessionExpiryResponse({
           response: res,
-          sessionUser: session?.user,
+          sessionUser,
           onRedirect: (path) => {
             window.location.replace(path);
           },
         })
       ) {
-        return { ok: false, error: undefined };
+        return { ok: false };
       }
 
       if (!res) {
@@ -65,13 +86,8 @@ export default function AccountDeleteButton({ apiUrl }: Props) {
       if (res.ok) {
         return { ok: true };
       }
-
-      lastError =
-        (data as any)?.error ??
-        (data as any)?.message ??
-        `アカウント削除に失敗しました。(status: ${res.status})`;
+      lastError = pickErrorMessage(data, res.status);
     }
-
     return { ok: false, error: lastError };
   };
 
@@ -90,12 +106,12 @@ export default function AccountDeleteButton({ apiUrl }: Props) {
     try {
       const result = await callDeleteApi();
       if (!result.ok) {
-        setError(result.error ?? "アカウント削除に失敗しました。");
+        setError(result.error ?? defaultError);
         return;
       }
 
       await signOut({ callbackUrl: "/auth/signin" });
-    } catch (e) {
+    } catch {
       setError("アカウント削除中にエラーが発生しました。");
     } finally {
       setIsDeleting(false);

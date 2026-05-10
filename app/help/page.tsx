@@ -1,4 +1,4 @@
-import HelpContactForm from "@/components/help-contact-form";
+import HelpContactForm from "./_components/help-contact-form";
 
 export default function HelpPage() {
   return (

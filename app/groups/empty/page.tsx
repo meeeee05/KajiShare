@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import GroupsEmptyClient from "@/components/groups-empty-client";
+import GroupsEmptyClient from "./_components/groups-empty-client";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
   isGuestSessionExpiredStatus,

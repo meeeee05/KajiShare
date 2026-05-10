@@ -1,5 +1,4 @@
 "use client";
-
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -8,7 +7,6 @@ import Link from "next/link";
 import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 type EditableField = "name" | "assign_mode" | "balance_type";
-
 type Props = {
   groupId?: string;
   shareKey?: string;
@@ -37,12 +35,29 @@ const BALANCE_TYPE_OPTIONS = [
   { value: "less", label: "少なめ" },
 ] as const;
 
+const inputClass =
+  "w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+// APIからのエラーメッセージを取得
+const pickErrorMessage = (payload: unknown, label: string, status: number) => {
+  const data =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : null;
+  if (typeof data?.error === "string" && data.error) {
+    return data.error;
+  }
+  if (typeof data?.message === "string" && data.message) {
+    return data.message;
+  }
+  return `${label}の更新に失敗しました。(status: ${status})`;
+};
+
 const normalizeAssignMode = (value?: string) => {
   const normalized = (value ?? "").trim().toLowerCase();
   if (!normalized) {
     return "random";
   }
-
   if (normalized === "manual") {
     return "manual";
   }
@@ -69,17 +84,16 @@ const normalizeBalancedType = (value?: string) => {
   if (!normalized) {
     return "";
   }
-
   if (normalized === "more") {
     return "more";
   }
   if (normalized === "less") {
     return "less";
   }
-
   return value ?? "";
 };
 
+// 表示用に日本語へ変換
 const displayBalancedType = (value?: string) => {
   const normalized = normalizeBalancedType(value);
   const found = BALANCE_TYPE_OPTIONS.find(
@@ -88,6 +102,17 @@ const displayBalancedType = (value?: string) => {
   return found?.label ?? value ?? "";
 };
 
+const normalizeDraftValue = (field: EditableField, value: string) => {
+  if (field === "assign_mode") {
+    return normalizeAssignMode(value);
+  }
+  if (field === "balance_type") {
+    return normalizeBalancedType(value);
+  }
+  return value;
+};
+
+// 編集
 export default function GroupEditableField({
   groupId,
   shareKey,
@@ -120,13 +145,7 @@ export default function GroupEditableField({
   }, [field, currentValue]);
 
   const onStartEdit = () => {
-    setDraft(
-      field === "assign_mode"
-        ? normalizeAssignMode(currentValue)
-        : field === "balance_type"
-          ? normalizeBalancedType(currentValue)
-          : currentValue,
-    );
+    setDraft(normalizeDraftValue(field, currentValue));
     setError(null);
     setEditing(true);
   };
@@ -151,7 +170,7 @@ export default function GroupEditableField({
       const base = apiUrl?.replace(/\/+$/, "");
       const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
-      if (!base || !v1Base || !token) {
+      if (!base || !token) {
         setError("認証情報またはAPI設定が不足しています。");
         return;
       }
@@ -161,16 +180,9 @@ export default function GroupEditableField({
         return;
       }
 
-      const normalizedValue =
-        field === "assign_mode"
-          ? normalizeAssignMode(trimmed)
-          : field === "balance_type"
-            ? normalizeBalancedType(trimmed)
-            : trimmed;
-
       const updateBody: { group: Record<string, string> } = {
         group: {
-          [field]: normalizedValue,
+          [field]: normalizeDraftValue(field, trimmed),
         },
       };
 
@@ -210,10 +222,7 @@ export default function GroupEditableField({
         }
 
         const data = await res.json().catch(() => null);
-        lastMessage =
-          (data as any)?.error ??
-          (data as any)?.message ??
-          `${label}の更新に失敗しました。(status: ${res.status})`;
+        lastMessage = pickErrorMessage(data, label, res.status);
       }
 
       setError(lastMessage);
@@ -222,6 +231,8 @@ export default function GroupEditableField({
   };
 
   if (editing) {
+    const fieldClassName = `${inputClass} ${inputClassName ?? ""}`;
+
     return (
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -229,7 +240,7 @@ export default function GroupEditableField({
             <select
               value={normalizeAssignMode(draft)}
               onChange={(e) => setDraft(e.target.value)}
-              className={`w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              className={fieldClassName}
               aria-label={`${label}入力`}
               disabled={isPending}
             >
@@ -243,7 +254,7 @@ export default function GroupEditableField({
             <select
               value={normalizeBalancedType(draft)}
               onChange={(e) => setDraft(e.target.value)}
-              className={`w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              className={fieldClassName}
               aria-label={`${label}入力`}
               disabled={isPending}
             >
@@ -258,7 +269,7 @@ export default function GroupEditableField({
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              className={`w-full rounded-md border bg-background px-3 py-2 text-sm sm:min-w-[220px] sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 ${inputClassName ?? ""}`}
+              className={fieldClassName}
               aria-label={`${label}入力`}
               disabled={isPending}
             />

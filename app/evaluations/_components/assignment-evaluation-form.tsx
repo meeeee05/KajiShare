@@ -11,6 +11,41 @@ type Props = {
   apiUrl?: string;
 };
 
+const defaultError = "評価の登録に失敗しました。";
+
+// APIからのエラーメッセージを取得
+const pickErrorMessage = (payload: unknown, status: number) => {
+  const data =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : null;
+
+  if (typeof data?.error === "string" && data.error) {
+    return data.error;
+  }
+  if (typeof data?.message === "string" && data.message) {
+    return data.message;
+  }
+  return `${defaultError}(status: ${status})`;
+};
+
+const removeEvaluationRow = (
+  formElement: HTMLFormElement,
+  taskId?: string,
+) => {
+  const normalizedTaskId = taskId?.trim();
+
+  if (normalizedTaskId) {
+    const rows = document.querySelectorAll(
+      `tr[data-task-id="${CSS.escape(normalizedTaskId)}"]`,
+    );
+    rows.forEach((row) => row.remove());
+    return;
+  }
+
+  formElement.closest("tr")?.remove();
+};
+
 export default function AssignmentEvaluationForm({
   assignmentId,
   taskId,
@@ -53,7 +88,7 @@ export default function AssignmentEvaluationForm({
       const base = apiUrl?.replace(/\/+$/, "");
       const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
-      if (!base || !v1Base || !token) {
+      if (!base || !token) {
         setError("認証情報またはAPI設定が不足しています。");
         return;
       }
@@ -93,48 +128,20 @@ export default function AssignmentEvaluationForm({
       if (res.ok) {
         setComment("");
         setScore("3");
-        const normalizedTaskId = (taskId ?? "").trim();
-        if (normalizedTaskId) {
-          const rows = document.querySelectorAll(
-            `tr[data-task-id="${CSS.escape(normalizedTaskId)}"]`,
-          );
-          rows.forEach((row) => row.remove());
-        } else {
-          const row = formElement.closest("tr");
-          if (row) {
-            row.remove();
-          }
-        }
+        removeEvaluationRow(formElement, taskId);
         return;
       }
 
       if (res.status === 422) {
         setInfo("評価済み");
-        const normalizedTaskId = (taskId ?? "").trim();
         setTimeout(() => {
-          if (normalizedTaskId) {
-            const rows = document.querySelectorAll(
-              `tr[data-task-id="${CSS.escape(normalizedTaskId)}"]`,
-            );
-            rows.forEach((row) => row.remove());
-            return;
-          }
-
-          const row = formElement.closest("tr");
-          if (row) {
-            row.remove();
-          }
+          removeEvaluationRow(formElement, taskId);
         }, 300);
         return;
       }
 
       const data = await res.json().catch(() => null);
-      const lastError =
-        (data as { error?: string; message?: string } | null)?.error ??
-        (data as { error?: string; message?: string } | null)?.message ??
-        `評価の登録に失敗しました。(status: ${res.status})`;
-
-      setError(lastError);
+      setError(pickErrorMessage(data, res.status));
     });
   };
 

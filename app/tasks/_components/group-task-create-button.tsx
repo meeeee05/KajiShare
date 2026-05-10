@@ -1,5 +1,4 @@
 "use client";
-
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -9,17 +8,16 @@ type Props = {
   groupId?: string;
   apiUrl?: string;
 };
-
 type AnyRecord = Record<string, unknown>;
 
 const asRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-
   return value as AnyRecord;
 };
 
+// タスク作成後のレスポンスから task_id を抽出
 const extractCreatedTaskId = (payload: unknown): string | undefined => {
   const root = asRecord(payload);
   if (!root) {
@@ -37,10 +35,38 @@ const extractCreatedTaskId = (payload: unknown): string | undefined => {
   if (typeof id === "number") {
     return String(id);
   }
-
   return undefined;
 };
 
+// APIからのエラーメッセージを取得
+const pickErrorMessage = (payload: unknown, fallback: string, status?: number) => {
+  const data =
+    payload && typeof payload === "object"
+      ? (payload as Record<string, unknown>)
+      : null;
+
+  if (typeof data?.error === "string" && data.error) {
+    return data.error;
+  }
+  if (typeof data?.message === "string" && data.message) {
+    return data.message;
+  }
+  return status ? `${fallback}(status: ${status})` : fallback;
+};
+
+const pickNameErrors = (payload: unknown) => {
+  const data =
+    payload && typeof payload === "object"
+      ? (payload as { errors?: Record<string, unknown> })
+      : null;
+  const nameErrors = data?.errors?.name;
+
+  return Array.isArray(nameErrors)
+    ? nameErrors.filter((item): item is string => typeof item === "string")
+    : [];
+};
+
+// タスク作成と割り振り作成
 export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -81,7 +107,7 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
       const base = apiUrl?.replace(/\/+$/, "");
       const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
 
-      if (!base || !v1Base || !token) {
+      if (!base || !token) {
         setError("認証情報またはAPI設定が不足しています。");
         return;
       }
@@ -127,7 +153,9 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
           return;
         }
 
-        const assignmentEndpoint = `${v1Base}/tasks/${encodeURIComponent(createdTaskId)}/assignments`;
+        const assignmentEndpoint = `${v1Base}/tasks/${encodeURIComponent(
+          createdTaskId,
+        )}/assignments`;
         const assignmentRes = await fetch(assignmentEndpoint, {
           method: "POST",
           headers: {
@@ -157,12 +185,12 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
           }
         } else {
           const assignmentError = await assignmentRes?.json().catch(() => null);
-          const message =
-            (assignmentError as { error?: string; message?: string } | null)
-              ?.error ??
-            (assignmentError as { error?: string; message?: string } | null)
-              ?.message ??
-            `割り振り作成に失敗しました。(status: ${assignmentRes?.status ?? "network"})`;
+          const message = pickErrorMessage(
+            assignmentError,
+            `割り振り作成に失敗しました。(status: ${
+              assignmentRes?.status ?? "network"
+            })`,
+          );
           setError(`タスク作成後の割り振り作成に失敗: ${message}`);
         }
 
@@ -174,25 +202,14 @@ export default function GroupTaskCreateButton({ groupId, apiUrl }: Props) {
       }
 
       const data = await res.json().catch(() => null);
-      const errors = (data as { errors?: Record<string, unknown> } | null)
-        ?.errors;
-      const nameErrors = Array.isArray(errors?.name)
-        ? errors?.name
-            .map((item) => (typeof item === "string" ? item : ""))
-            .filter(Boolean)
-        : [];
+      const nameErrors = pickNameErrors(data);
 
       if (res.status === 422 && nameErrors.length > 0) {
         setError(`家事の名前: ${nameErrors.join(" / ")}`);
         return;
       }
 
-      const lastMessage =
-        (data as { error?: string; message?: string } | null)?.error ??
-        (data as { error?: string; message?: string } | null)?.message ??
-        `タスク作成に失敗しました。(status: ${res.status})`;
-
-      setError(lastMessage);
+      setError(pickErrorMessage(data, "タスク作成に失敗しました。", res.status));
     });
   };
 

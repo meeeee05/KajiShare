@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import AccountDeleteButton from "@/components/account-delete-button";
+import AccountDeleteButton from "./_components/account-delete-button";
 
 export default async function AccountPage() {
   const session = await auth();

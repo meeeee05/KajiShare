@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import GroupTaskCreateButton from "@/components/group-task-create-button";
 import TaskDeleteButton from "@/components/task-delete-button";
+import GroupTaskCreateButton from "./_components/group-task-create-button";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
   isGuestSessionExpiredStatus,
