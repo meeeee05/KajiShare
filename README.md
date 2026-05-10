@@ -1,36 +1,158 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# KajiShare
 
-## Getting Started
+KajiShare は、家族・同居人・チーム内で家事や日常タスクを分担し、進捗や評価を共有するためのタスク管理アプリです。
 
-First, run the development server:
+「誰が何を担当しているか」「どのタスクが完了しているか」「完了したタスクがどう評価されたか」をひとつの画面で確認できるようにし、家事分担の偏りや確認漏れを減らすことを目的としています。
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## KajiShare の特徴
+
+### グループ単位で家事を管理
+
+ユーザーはグループを作成し、家族やルームメイトなどのメンバーを招待できます。  
+タスク、担当者、評価、通知はグループごとに整理されるため、複数の生活単位やチームを分けて管理できます。
+
+グループでは、管理者とメンバーの役割を分けて扱います。管理者はグループ設定や周期タスクの管理などを行い、メンバーは自分に割り当てられたタスクを確認・更新できます。
+
+### タスクの作成と割り当て
+
+グループ内でタスクを作成し、メンバーへ割り当てられます。  
+タスクには名前、説明、負担ポイントなどを設定できるため、単なる作業一覧ではなく「どれくらい大変なタスクか」も含めて共有できます。
+
+割り当てられたタスクは「担当のタスク」画面で確認でき、ステータスを着手前・進行中・完了へ更新できます。
+
+### 周期タスクの管理
+
+毎週発生する家事などは、周期タスクとして管理できます。  
+たとえば「ゴミ出し」「風呂掃除」「買い出し」など、繰り返し発生する作業をあらかじめ登録しておくことで、毎回手動でタスクを作成する手間を減らせます。
+
+周期タスクは開始日、曜日、負担ポイント、説明を設定して管理できます。
+
+### 自分の担当タスクをすぐ確認
+
+ダッシュボードや担当タスク画面では、自分に割り当てられているタスクを確認できます。  
+タスクの進捗や最近割り当てられたタスクが見えるため、今やるべき作業を把握しやすくなっています。
+
+### 完了タスクの評価
+
+他のメンバーが完了したタスクに対して評価を登録できます。  
+評価機能により、単にタスクを終わらせるだけでなく、作業の貢献度や取り組みをグループ内で見える化できます。
+
+評価済みのタスクは重複して評価されないように扱われ、評価対象は自分自身の担当タスクを除外するようになっています。
+
+### 通知機能
+
+タスクの割り当てや評価など、重要なイベントは通知として確認できます。  
+ヘッダーの通知アイコンには新着通知がある場合に赤い印が表示され、通知一覧画面で詳細を確認できます。
+
+通知は既読状態をユーザーごとに管理し、同じ通知で何度も新着表示されないようにしています。
+
+### ゲスト利用への対応
+
+ゲストセッションにも対応しており、認証情報が期限切れになった場合は専用の案内ページへ遷移します。  
+これにより、通常ユーザーとゲストユーザーのどちらでも安全に画面を利用できるようにしています。
+
+### ダークモード
+
+ヘッダーからライトモードとダークモードを切り替えられます。  
+表示設定はブラウザに保存されるため、次回アクセス時も選択したテーマを維持できます。
+
+## 主な画面
+
+- ダッシュボード: 自分の担当タスク、最近の割り当て、評価されたタスク、参加グループを確認
+- タスク一覧: グループごとの通常タスク・周期タスクを確認
+- 担当のタスク: 自分に割り当てられたタスクのステータスを更新
+- 評価: 他メンバーが完了したタスクを評価
+- 通知: タスク割り当てや評価などの通知を確認
+- グループ設定: グループ情報、管理者、参加メンバー、招待情報を確認
+- 周期タスク管理: 繰り返し発生するタスクを作成・編集・削除
+- アカウント設定: アカウント情報や退会操作を管理
+- ヘルプ: KajiShare の概要や問い合わせフォームを確認
+
+## 技術構成
+
+- Next.js
+- React
+- TypeScript
+- NextAuth
+- Radix UI
+
+## バックエンド API との連携
+
+このリポジトリは KajiShare のフロントエンドです。  
+タスク、グループ、通知、評価、認証などのデータはバックエンド API から取得します。
+
+ローカル開発では、別途 KajiShare のバックエンドを起動し、フロントエンド側の `API_URL` にバックエンドの URL を指定します。
+
+例:
+
+```env
+API_URL=http://localhost:3001/api/v1
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`API_URL` は `/api/v1` 付きでも、ベース URL のみでも動作するようにしています。  
+ただし、プロジェクト内では `/api/v1` 配下の API を前提にしています。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 環境変数
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+ローカル開発では `.env.local` に以下のような値を設定します。
 
-## Learn More
+```env
+# バックエンド API
+API_URL=http://localhost:3001/api/v1
 
-To learn more about Next.js, take a look at the following resources:
+# Google ログイン
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# NextAuth / Auth.js
+AUTH_SECRET=your-auth-secret
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+# アプリ内の日付表示で使うタイムゾーン
+APP_TIME_ZONE=Asia/Tokyo
+```
 
-## Deploy on Vercel
+問い合わせフォームのメール送信を使う場合は、SMTP 用の設定も必要です。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```env
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+SMTP_FROM=no-reply@example.com
+CONTACT_TO=contact@example.com
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+主な環境変数の用途は以下です。
+
+- `API_URL`: KajiShare バックエンド API の URL
+- `GOOGLE_CLIENT_ID`: Google OAuth クライアント ID
+- `GOOGLE_CLIENT_SECRET`: Google OAuth クライアントシークレット
+- `AUTH_SECRET`: NextAuth / Auth.js のセッション署名などに使う秘密値
+- `APP_TIME_ZONE`: 担当タスクなどの日付計算で使うタイムゾーン
+- `SMTP_*`: 問い合わせフォームのメール送信用設定
+- `CONTACT_TO`: 問い合わせメールの送信先
+
+## 開発環境での起動
+
+依存関係をインストールしたあと、開発サーバーを起動します。
+
+```bash
+npm install
+npm run dev
+```
+
+ブラウザで以下を開きます。
+
+```text
+http://localhost:3000
+```
+
+## 品質チェック
+
+Lint と TypeScript の型チェックは以下で実行できます。
+
+```bash
+npm run lint
+npx tsc --noEmit
+```
