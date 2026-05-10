@@ -1,5 +1,4 @@
 "use client";
-
 import { MainNav } from "./main-nav";
 import UserButton from "./settings";
 import { usePathname } from "next/navigation";

@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import TaskDeleteButton from "@/components/task-delete-button";
+import TaskResourceDeleteButton from "@/components/task-resource-delete-button";
 import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
 
 //　型定義
@@ -220,7 +220,7 @@ export default function AssignmentStatusButton({
 
         {showDeleteWhenCompleted && isCompleted ? (
           <div className="ml-auto">
-            <TaskDeleteButton
+            <TaskResourceDeleteButton
               taskId={taskId}
               groupId={groupId}
               apiUrl={apiUrl}

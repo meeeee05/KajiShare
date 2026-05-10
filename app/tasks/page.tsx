@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import TaskDeleteButton from "@/components/task-delete-button";
+import TaskResourceDeleteButton from "@/components/task-resource-delete-button";
 import GroupTaskCreateButton from "./_components/group-task-create-button";
 import {
   GUEST_EXPIRED_REDIRECT_PATH,
@@ -333,7 +333,7 @@ export default async function TasksPage() {
                         <td className="px-3 py-2 text-right">
                           {task.isRecurring ? (
                             task.sourceTaskId ? (
-                              <TaskDeleteButton
+                              <TaskResourceDeleteButton
                                 taskId={task.sourceTaskId}
                                 groupId={group.id}
                                 apiUrl={apiUrl}
@@ -343,7 +343,7 @@ export default async function TasksPage() {
                               <span className="text-xs text-slate-400">-</span>
                             )
                           ) : (
-                            <TaskDeleteButton
+                            <TaskResourceDeleteButton
                               taskId={task.id}
                               groupId={group.id}
                               apiUrl={apiUrl}

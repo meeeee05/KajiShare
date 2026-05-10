@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -13,7 +12,7 @@ type Props = {
   resourceType?: "task" | "recurring";
 };
 
-export default function TaskDeleteButton({
+export default function TaskResourceDeleteButton({
   taskId,
   groupId,
   apiUrl,

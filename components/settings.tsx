@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "./ui/button";
 import { Bell, Settings, Sun } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,84 +15,42 @@ import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
+//　ユーザーメニューと通知アイコンを表示
 const POLLING_INTERVAL_MS = 7_000;
 const NOTIFICATIONS_LIMIT = 100;
-
-const getSeenKey = (user: { id?: string | null; email?: string | null }) => {
-  const stableId = user.id ?? user.email ?? "anonymous";
-  return `notifications:lastSeen:${stableId}`;
-};
-
-const getSeenFingerprintKey = (user: {
+const menuItemClass =
+  "block w-full justify-start text-base px-2 py-1.5 transition-colors hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-100 focus:text-blue-800";
+type SessionUser = {
   id?: string | null;
   email?: string | null;
-}) => {
-  const stableId = user.id ?? user.email ?? "anonymous";
-  return `notifications:lastSeenFingerprint:${stableId}`;
+  account_type?: string | null;
+  isGuest?: boolean;
 };
 
-const parseOccurredAtMs = (raw: string): number => {
-  const direct = Date.parse(raw);
-  if (Number.isFinite(direct)) {
-    return direct;
-  }
+// 通知の既読管理のためのキーを生成
+const getSeenKey = (
+  user: { id?: string | null; email?: string | null },
+  type: "time" | "fingerprint",
+) => `notifications:lastSeen${type === "fingerprint" ? "Fingerprint" : ""}:${user.id ?? user.email ?? "anonymous"}`;
 
-  const trimmed = raw.trim();
-  const match = trimmed.match(
-    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?(?:\s*(Z|[+-]\d{2}:?\d{2}))?$/,
-  );
-
-  if (!match) {
-    return Number.NaN;
-  }
-
-  const [, y, m, d, hh, mm, ssRaw, msRaw, tzRaw] = match;
-  const ss = ssRaw ?? "00";
-  const ms = msRaw ? msRaw.slice(0, 3).padEnd(3, "0") : "000";
-
-  if (tzRaw) {
-    const tz =
-      tzRaw === "Z" ? "Z" : tzRaw.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
-    return Date.parse(`${y}-${m}-${d}T${hh}:${mm}:${ss}.${ms}${tz}`);
-  }
-
-  return new Date(
-    Number(y),
-    Number(m) - 1,
-    Number(d),
-    Number(hh),
-    Number(mm),
-    Number(ss),
-    Number(ms),
-  ).getTime();
-};
+const parseOccurredAtMs = (raw: string): number => Date.parse(raw);
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
-
   return value as Record<string, unknown>;
 };
 
-const pickFirstString = (
-  row: Record<string, unknown>,
-  keys: string[],
-): string => {
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-
-    if (typeof value === "number") {
-      return String(value);
-    }
-  }
-
+// 通知の発生日時と内容から一意の識別子を生成
+const pickString = (row: Record<string, unknown>, key: string): string => {
+  const value = row[key];
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number") return String(value);
   return "";
 };
 
+// 地位通知欄取得
 const extractNotifications = (payload: unknown): unknown[] => {
   const root = asRecord(payload);
   if (!root) {
@@ -108,95 +66,24 @@ const extractNotifications = (payload: unknown): unknown[] => {
 const extractViewerUserId = (payload: unknown): string => {
   const root = asRecord(payload);
   const data = asRecord(root?.data);
-
-  const candidate =
-    data?.viewer_user_id ??
-    data?.viewerUserId ??
-    root?.viewer_user_id ??
-    root?.viewerUserId;
-
-  if (typeof candidate === "string") {
-    return candidate;
-  }
-  if (typeof candidate === "number") {
-    return String(candidate);
-  }
-
-  return "";
+  return data ? pickString(data, "viewer_user_id") : "";
 };
 
-const unwrapNotificationRow = (
-  row: unknown,
-): Record<string, unknown> | null => {
-  const root = asRecord(row);
-  if (!root) {
-    return null;
-  }
-
-  const rootAttributes = asRecord(root.attributes);
-  if (rootAttributes) {
-    return {
-      ...root,
-      ...rootAttributes,
-    };
-  }
-
-  const notification = asRecord(root.notification);
-  const notificationAttributes = asRecord(notification?.attributes);
-  if (notificationAttributes) {
-    return {
-      ...notification,
-      ...notificationAttributes,
-      id:
-        notification?.id ??
-        (typeof root.id === "string" || typeof root.id === "number"
-          ? root.id
-          : undefined),
-    };
-  }
-
-  const rowData = asRecord(root.data);
-  const rowDataAttributes = asRecord(rowData?.attributes);
-  if (rowDataAttributes) {
-    return {
-      ...rowData,
-      ...rowDataAttributes,
-      id:
-        rowData?.id ??
-        (typeof root.id === "string" || typeof root.id === "number"
-          ? root.id
-          : undefined),
-    };
-  }
-
-  return notification ?? rowData ?? root;
-};
-
-const pickTimestamp = (row: Record<string, unknown>): string | null => {
-  const keys = ["occurred_at", "occurredAt", "created_at", "createdAt"];
-
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-  }
-
-  return null;
-};
-
+//　同じ日時でも中身が違う通知が来た場合に識別
 const buildNotificationFingerprint = (
   row: Record<string, unknown>,
   occurredAt: string,
 ): string => {
-  const id = pickFirstString(row, ["id"]);
-  const type = pickFirstString(row, ["type"]);
-  const title = pickFirstString(row, ["title"]);
-  const message = pickFirstString(row, ["message"]);
-
-  return [id, type, title, message, occurredAt].join("|");
+  return [
+    pickString(row, "id"),
+    pickString(row, "type"),
+    pickString(row, "title"),
+    pickString(row, "message"),
+    occurredAt,
+  ].join("|");
 };
 
+// APIからのレスポンスを処理して、ゲストセッションの有効期限切れを検出
 const extractLatestNotificationMeta = (
   payload: unknown,
 ): { occurredAt: string; fingerprint: string } | null => {
@@ -210,12 +97,12 @@ const extractLatestNotificationMeta = (
   let latestTime = Number.NEGATIVE_INFINITY;
 
   for (const row of notifications) {
-    const item = unwrapNotificationRow(row);
+    const item = asRecord(row);
     if (!item) {
       continue;
     }
 
-    const occurredAt = pickTimestamp(item);
+    const occurredAt = pickString(item, "occurred_at");
     if (!occurredAt) {
       continue;
     }
@@ -245,12 +132,8 @@ export default function UserButton() {
   // クライアント側でセッション取得
   const { data: session, status } = useSession();
   const pathname = usePathname();
-  const isGuest = (session?.user as { isGuest?: boolean } | undefined)?.isGuest;
-  const secondaryLabel = (session?.user as any)?.account_type
-    ? (session?.user as any)?.account_type
-    : isGuest
-      ? ""
-      : session?.user?.email;
+  const sessionUser = session?.user as SessionUser | undefined;
+  const secondaryLabel = sessionUser?.account_type ?? (sessionUser?.isGuest ? "" : sessionUser?.email);
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const [latestOccurredAt, setLatestOccurredAt] = useState<string | null>(null);
   const [latestFingerprint, setLatestFingerprint] = useState<string | null>(
@@ -258,26 +141,34 @@ export default function UserButton() {
   );
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const inFlightCountRef = useRef(0);
 
+  // 通知の既読管理
   const seenKey = useMemo(
     () =>
-      getSeenKey({
-        id: (session?.user as { id?: string | null } | undefined)?.id ?? null,
-        email: session?.user?.email ?? null,
-      }),
-    [session?.user],
+      getSeenKey(
+        {
+          id: sessionUser?.id ?? null,
+          email: sessionUser?.email ?? null,
+        },
+        "time",
+      ),
+    [sessionUser?.email, sessionUser?.id],
   );
 
+  // ユーザ別の通知の識別管理
   const seenFingerprintKey = useMemo(
     () =>
-      getSeenFingerprintKey({
-        id: (session?.user as { id?: string | null } | undefined)?.id ?? null,
-        email: session?.user?.email ?? null,
-      }),
-    [session?.user],
+      getSeenKey(
+        {
+          id: sessionUser?.id ?? null,
+          email: sessionUser?.email ?? null,
+        },
+        "fingerprint",
+      ),
+    [sessionUser?.email, sessionUser?.id],
   );
 
+  // ゲストセッションの有効期限切れを検出
   const markNotificationsSeen = useCallback(() => {
     if (!latestOccurredAt || !latestFingerprint) {
       return;
@@ -287,11 +178,12 @@ export default function UserButton() {
       window.localStorage.setItem(seenKey, latestOccurredAt);
       window.localStorage.setItem(seenFingerprintKey, latestFingerprint);
     } catch {
-      // ignore localStorage errors
+      return;
     }
     setHasNewNotification(false);
   }, [latestFingerprint, latestOccurredAt, seenFingerprintKey, seenKey]);
 
+  // 通知の新着判定
   const fetchLatestNotification = useCallback(async () => {
     const seq = ++requestSeqRef.current;
     abortRef.current?.abort();
@@ -311,84 +203,46 @@ export default function UserButton() {
       limit: String(NOTIFICATIONS_LIMIT),
     });
 
-    inFlightCountRef.current += 1;
-    console.log("[notifications-bell-inflight]", {
-      count: inFlightCountRef.current,
-    });
+    const res = await fetch(`/api/notifications?${params.toString()}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    }).catch(() => null);
 
+    if (!res?.ok) return;
+
+    const payload = (await res.json().catch(() => null)) as unknown;
+    const viewerUserId = extractViewerUserId(payload);
+    if (viewerUserId && sessionUser?.id && viewerUserId !== sessionUser.id) return;
+    if (seq !== requestSeqRef.current) return;
+
+    const latest = extractLatestNotificationMeta(payload);
+    if (!latest) return;
+
+    setLatestOccurredAt(latest.occurredAt);
+    setLatestFingerprint(latest.fingerprint);
+
+    let seen = "";
+    let seenFingerprint = "";
     try {
-      const res = await fetch(`/api/notifications?${params.toString()}`, {
-        cache: "no-store",
-        signal: controller.signal,
-      }).catch((error) => {
-        if ((error as { name?: string } | null)?.name === "AbortError") {
-          return null;
-        }
-
-        return null;
-      });
-
-      if (!res?.ok) {
-        const detail = await res?.json().catch(() => null);
-        console.warn("[notifications-bell] fetch failed", {
-          status: res?.status ?? "no-response",
-          detail,
-        });
-        return;
-      }
-
-      const payload = (await res.json().catch(() => null)) as unknown;
-
-      const viewerUserId = extractViewerUserId(payload);
-      const sessionUserId =
-        (session?.user as { id?: string } | undefined)?.id ?? "";
-      if (viewerUserId && sessionUserId && viewerUserId !== sessionUserId) {
-        return;
-      }
-
-      if (seq !== requestSeqRef.current) {
-        return;
-      }
-
-      const latest = extractLatestNotificationMeta(payload);
-
-      if (!latest) {
-        return;
-      }
-
-      setLatestOccurredAt(latest.occurredAt);
-      setLatestFingerprint(latest.fingerprint);
-
-      let seen = "";
-      let seenFingerprint = "";
-      try {
-        seen = window.localStorage.getItem(seenKey) ?? "";
-        seenFingerprint = window.localStorage.getItem(seenFingerprintKey) ?? "";
-      } catch {
-        seen = "";
-        seenFingerprint = "";
-      }
-
-      if (!seen || !seenFingerprint) {
-        setHasNewNotification(true);
-        return;
-      }
-
-      const latestTime = parseOccurredAtMs(latest.occurredAt);
-      const seenTime = parseOccurredAtMs(seen);
-      const isNewByTime = Number.isFinite(latestTime) && latestTime > seenTime;
-      const isNewByFingerprint = latest.fingerprint !== seenFingerprint;
-
-      setHasNewNotification(isNewByTime || isNewByFingerprint);
-    } finally {
-      if (inFlightCountRef.current > 0) {
-        inFlightCountRef.current -= 1;
-      }
-      console.log("[notifications-bell-inflight]", {
-        count: inFlightCountRef.current,
-      });
+      seen = window.localStorage.getItem(seenKey) ?? "";
+      seenFingerprint = window.localStorage.getItem(seenFingerprintKey) ?? "";
+    } catch {
+      seen = "";
+      seenFingerprint = "";
     }
-  }, [seenFingerprintKey, seenKey, session]);
+
+    if (!seen || !seenFingerprint) {
+      setHasNewNotification(true);
+      return;
+    }
+
+    const latestTime = parseOccurredAtMs(latest.occurredAt);
+    const seenTime = parseOccurredAtMs(seen);
+    setHasNewNotification(
+      (Number.isFinite(latestTime) && latestTime > seenTime) ||
+        latest.fingerprint !== seenFingerprint,
+    );
+  }, [seenFingerprintKey, seenKey, session, sessionUser?.id]);
 
   useEffect(() => {
     void fetchLatestNotification();
@@ -475,9 +329,9 @@ export default function UserButton() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-48" align="end" forceMount>
-            <AccountMenuButtons />
-            <GroupMenuButtons />
-            <HelpMenuButtons />
+            <MenuLink href="/account">アカウント設定</MenuLink>
+            <MenuLink href="/groups">グループ設定</MenuLink>
+            <MenuLink href="/help">ヘルプ</MenuLink>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
@@ -530,50 +384,16 @@ export default function UserButton() {
   );
 }
 
-function AccountMenuButtons(
-  props: React.ComponentPropsWithoutRef<typeof DropdownMenuItem>,
-) {
+function MenuLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
   return (
     <DropdownMenuItem asChild>
-      <Link
-        href="/account"
-        className="block w-full justify-start text-base px-2 py-1.5 transition-colors hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-100 focus:text-blue-800"
-        {...(props as any)}
-      >
-        アカウント設定
-      </Link>
-    </DropdownMenuItem>
-  );
-}
-
-function GroupMenuButtons(
-  props: React.ComponentPropsWithoutRef<typeof DropdownMenuItem>,
-) {
-  return (
-    <DropdownMenuItem asChild>
-      <Link
-        href="/groups"
-        className="block w-full justify-start text-base px-2 py-1.5 transition-colors hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-100 focus:text-blue-800"
-        {...(props as any)}
-      >
-        グループ設定
-      </Link>
-    </DropdownMenuItem>
-  );
-}
-
-function HelpMenuButtons(
-  props: React.ComponentPropsWithoutRef<typeof DropdownMenuItem>,
-) {
-  return (
-    <DropdownMenuItem asChild>
-      <Link
-        href="/help"
-        className="block w-full justify-start text-base px-2 py-1.5 transition-colors hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-100 focus:text-blue-800"
-        {...(props as any)}
-      >
-        ヘルプ
-      </Link>
+      <Link href={href} className={menuItemClass}>{children}</Link>
     </DropdownMenuItem>
   );
 }
