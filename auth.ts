@@ -3,6 +3,7 @@ import GoogleProvider from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import "next-auth/jwt";
 import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -109,6 +110,7 @@ export const config: NextAuthConfig = {
             headers: {
               "Content-Type": "application/json",
               Origin: backendOrigin(),
+              ...backendServerHeaders(),
             },
             cache: "no-store",
           });
@@ -220,6 +222,7 @@ export const config: NextAuthConfig = {
             headers: {
               Authorization: `Bearer ${idToken}`,
               Origin: backendOrigin(),
+              ...backendServerHeaders(),
             },
           });
 
