@@ -123,7 +123,7 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
 
       const result = await postJson({
         endpoint: `${v1Base}/groups`,
-        body: { name: trimmed },
+        body: { group: { name: trimmed } },
         token,
         sessionUser,
         onRedirect: (path) => router.replace(path),

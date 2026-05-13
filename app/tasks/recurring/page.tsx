@@ -7,6 +7,8 @@ import {
   isGuestSessionExpiredStatus,
   isGuestSessionUser,
 } from "@/lib/guest-session";
+import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 // 型定義
 type AnyRecord = Record<string, unknown>;
@@ -132,6 +134,8 @@ export default async function RecurringTasksPage({
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${idToken}`,
+        Origin: backendOrigin(),
+        ...backendServerHeaders(),
       },
       cache: "no-store",
     }).catch(() => null);

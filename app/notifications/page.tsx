@@ -7,6 +7,7 @@ import {
   isGuestSessionUser,
 } from "@/lib/guest-session";
 import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 const NOTIFICATIONS_LIMIT = 100;
 const FETCH_ERROR_MESSAGE = "通知の取得に失敗しました";
@@ -69,6 +70,7 @@ export default async function NotificationsPage({
     headers: {
       Authorization: `Bearer ${idToken}`,
       Origin: backendOrigin(),
+      ...backendServerHeaders(),
     },
     cache: "no-store",
   }).catch(() => null);

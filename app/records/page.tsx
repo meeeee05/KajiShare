@@ -7,6 +7,8 @@ import {
   isGuestSessionExpiredStatus,
   isGuestSessionUser,
 } from "@/lib/guest-session";
+import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 // 型定義
 type GroupItem = {
@@ -452,7 +454,11 @@ export default async function RecordsPage() {
   const v1Base = base.endsWith("/api/v1") ? base : `${base}/api/v1`;
   const fetchOkJson = async (url: string): Promise<unknown | null> => {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${idToken}` },
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        Origin: backendOrigin(),
+        ...backendServerHeaders(),
+      },
       cache: "no-store",
     }).catch(() => null);
 

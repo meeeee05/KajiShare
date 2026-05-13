@@ -6,6 +6,8 @@ import {
   isGuestSessionExpiredStatus,
   isGuestSessionUser,
 } from "@/lib/guest-session";
+import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 export default async function EmptyGroupsPage() {
   const session = await auth();
@@ -23,6 +25,8 @@ export default async function EmptyGroupsPage() {
     const res = await fetch(`${apiUrl}/memberships`, {
       headers: {
         Authorization: `Bearer ${idToken}`,
+        Origin: backendOrigin(),
+        ...backendServerHeaders(),
       },
       cache: "no-store",
     }).catch(() => null);
