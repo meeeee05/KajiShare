@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 // 通知取得件数
 const DEFAULT_LIMIT = 50;
@@ -80,6 +81,7 @@ export async function GET(req: Request) {
       headers: {
         Authorization: `Bearer ${idToken}`,
         Origin: backendOrigin(),
+        ...backendServerHeaders(),
       },
       cache: "no-store",
     });
