@@ -211,7 +211,7 @@ const membershipBelongsToGroup = (
 export default async function EvaluationsPage() {
   const session = await auth();
   if (!session) {
-    redirect("/auth/timeout");
+    redirect("/auth/signin");
   }
 
   const apiUrl = process.env.API_URL;

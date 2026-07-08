@@ -438,7 +438,7 @@ const isCompletedStatus = (value?: string) =>
 
 export default async function RecordsPage() {
   const session = await auth();
-  if (!session) redirect("/auth/timeout");
+  if (!session) redirect("/auth/signin");
 
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;

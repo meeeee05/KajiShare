@@ -157,9 +157,9 @@ const normalizeTask = (row: unknown, index: number): TaskItem => {
 export default async function TasksPage() {
   const session = await auth();
 
-  // 未サインインならセッション切れページへ
+  // 未サインインならサインインページへ
   if (!session) {
-    redirect("/auth/timeout");
+    redirect("/auth/signin");
   }
   const apiUrl = process.env.API_URL;
   const idToken = (session.user as { idToken?: string } | undefined)?.idToken;

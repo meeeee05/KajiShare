@@ -159,9 +159,9 @@ const normalizeGroups = (groupsPayload: unknown): GroupListItem[] =>
 export default async function GroupsPage() {
   const session = await auth();
 
-  // 未サインインならセッション切れページへ
+  // 未サインインならサインインページへ
   if (!session) {
-    redirect("/auth/timeout");
+    redirect("/auth/signin");
   }
 
   const apiUrl = process.env.API_URL;

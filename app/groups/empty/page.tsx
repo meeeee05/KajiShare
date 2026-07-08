@@ -13,7 +13,7 @@ export default async function EmptyGroupsPage() {
   const session = await auth();
 
   if (!session) {
-    redirect("/auth/timeout");
+    redirect("/auth/signin");
   }
 
   // APIリクエスト前のゲストセッション期限切れチェック

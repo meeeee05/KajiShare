@@ -37,7 +37,7 @@ export default async function NotificationsPage({
   const session = await auth();
 
   if (!session) {
-    redirect("/auth/timeout");
+    redirect("/auth/signin");
   }
 
   const apiUrl = process.env.API_URL;
