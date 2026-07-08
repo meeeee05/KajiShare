@@ -5,6 +5,8 @@ import {
   isGuestSessionExpiredStatus,
   isGuestSessionUser,
 } from "@/lib/guest-session";
+import { backendOrigin } from "@/lib/backend-origin";
+import { backendServerHeaders } from "@/lib/backend-server-headers";
 
 // 型定義
 type AnyRecord = Record<string, unknown>;
@@ -259,9 +261,9 @@ const normalizeEvaluation = (row: unknown) => {
 export default async function Home() {
   const session = await auth();
 
-  // 未サインインならセッション切れページへ
+  // 未サインインならサインインページへ
   if (!session) {
-    redirect("/auth/timeout");
+    redirect("/auth/signin");
   }
 
   const apiUrl = process.env.API_URL;
@@ -282,6 +284,8 @@ export default async function Home() {
     const res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${idToken}`,
+        Origin: backendOrigin(),
+        ...backendServerHeaders(),
       },
       cache: "no-store",
     }).catch(() => null);
