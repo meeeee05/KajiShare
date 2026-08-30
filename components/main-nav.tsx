@@ -42,35 +42,35 @@ export function MainNav({
           <NavigationMenuList>
             <NavigationMenuItem>
               <NavigationMenuLink
-                href="/tasks"
+                asChild
                 className={
                   navigationMenuTriggerStyle() +
                   " ml-0 text-sm font-bold sm:ml-2 sm:text-base md:text-lg"
                 }
               >
-                タスク一覧
+                <Link href="/tasks">タスク一覧</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink
-                href="/records"
+                asChild
                 className={
                   navigationMenuTriggerStyle() +
                   " text-sm font-bold sm:text-base md:text-lg"
                 }
               >
-                担当のタスク
+                <Link href="/records">担当のタスク</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink
-                href="/evaluations"
+                asChild
                 className={
                   navigationMenuTriggerStyle() +
                   " text-sm font-bold sm:text-base md:text-lg"
                 }
               >
-                評価
+                <Link href="/evaluations">評価</Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
           </NavigationMenuList>
