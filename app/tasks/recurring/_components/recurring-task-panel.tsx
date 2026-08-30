@@ -413,14 +413,6 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
           </div>
         </form>
       )}
-
-      {!showForm && (
-        <p className="text-xs text-slate-500">
-          {canManage
-            ? "「新規作成」または一覧の「編集」からフォームを開けます。"
-            : "「新規作成」から登録できます。"}
-        </p>
-      )}
     </div>
   );
 }

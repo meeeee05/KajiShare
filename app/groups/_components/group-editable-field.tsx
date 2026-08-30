@@ -307,7 +307,7 @@ export default function GroupEditableField({
       {linkHref ? (
         <Link
           href={linkHref}
-          className={`${textClassName ?? ""} min-w-0 break-all text-black hover:underline`}
+          className={`${textClassName ?? ""} min-w-0 break-all text-black hover:underline dark:text-white`}
         >
           {resolvedDisplayValue}
         </Link>

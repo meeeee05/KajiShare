@@ -482,7 +482,7 @@ export default async function RecordsPage() {
     return (
       <div className="prose max-w-none p-4 sm:p-6">
         <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
-          <h1 className="text-2xl font-extrabold">担当の家事</h1>
+          <h1 className="text-2xl font-extrabold">担当のタスク</h1>
         </div>
         <div className="not-prose mt-8 space-y-4">
           <p className="text-slate-600 dark:text-slate-300">
@@ -617,7 +617,7 @@ export default async function RecordsPage() {
   return (
     <div className="prose max-w-none p-4 sm:p-6">
       <div className="not-prose mb-2 flex items-center justify-between gap-3 border-b-2 border-current pb-1">
-        <h1 className="text-2xl font-extrabold">担当の家事</h1>
+        <h1 className="text-2xl font-extrabold">担当のタスク</h1>
       </div>
 
       <p className="mt-6 text-sm text-slate-600 dark:text-slate-300">
