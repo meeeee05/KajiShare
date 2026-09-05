@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import TaskResourceDeleteButton from "@/components/task-resource-delete-button";
-import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
+import { updateAssignmentStatusAction } from "@/app/actions";
 
 //　型定義
 type Props = {
@@ -11,7 +10,6 @@ type Props = {
   taskId?: string;
   groupId?: string;
   currentStatus?: string;
-  apiUrl?: string;
   showDeleteWhenCompleted?: boolean;
   localOnly?: boolean;
 };
@@ -54,40 +52,16 @@ const displayStatus = (value?: string) => statusLabels[toCanonicalStatus(value)]
 
 const todayYmd = () => new Date().toISOString().slice(0, 10);
 
-const buildAssignmentStatusPayload = (status: CanonicalStatus) => ({
-  assignment: {
-    completed_date: status === "completed" ? todayYmd() : null,
-    status,
-  },
-});
-
-const pickErrorMessage = (payload: unknown, status: number) => {
-  const data =
-    payload && typeof payload === "object"
-      ? (payload as Record<string, unknown>)
-      : null;
-
-  if (typeof data?.error === "string" && data.error) {
-    return data.error;
-  }
-  if (typeof data?.message === "string" && data.message) {
-    return data.message;
-  }
-  return `ステータス更新に失敗しました。(status: ${status})`;
-};
-
 // status更新
 export default function AssignmentStatusButton({
   assignmentId,
   taskId,
   groupId,
   currentStatus,
-  apiUrl,
   showDeleteWhenCompleted,
   localOnly,
 }: Props) {
   const router = useRouter();
-  const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [localStatus, setLocalStatus] = useState<string | undefined>(
@@ -123,54 +97,28 @@ export default function AssignmentStatusButton({
   };
 
   const updateAssignmentStatus = async (status: CanonicalStatus) => {
-    const token = (session?.user as { idToken?: string } | undefined)?.idToken;
-    const base = apiUrl?.replace(/\/+$/, "");
-    const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
-
-    if (!base || !token) {
-      setError("認証情報またはAPI設定が不足しています。");
-      return false;
-    }
-
     if (!assignmentId) {
       setError("assignment が未作成のため更新できません。");
       return false;
     }
-    let lastError = "ステータス更新に失敗しました。";
 
-    for (const method of ["PATCH", "PUT"] as const) {
-      const res = await fetch(
-        `${v1Base}/assignments/${encodeURIComponent(assignmentId)}`,
-        {
-          method,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(buildAssignmentStatusPayload(status)),
-        },
-      ).catch(() => null);
+    const result = await updateAssignmentStatusAction({
+      assignmentId,
+      status,
+      completedDate: status === "completed" ? todayYmd() : null,
+    });
 
-      if (
-        await handleGuestSessionExpiryResponse({
-          response: res,
-          sessionUser: session?.user,
-          onRedirect: (path) => router.replace(path),
-        })
-      ) {
-        return false;
-      }
-      if (!res) {
-        continue;
-      }
-      if (res.ok) {
-        return true;
-      }
-      const data = await res.json().catch(() => null);
-      lastError = pickErrorMessage(data, res.status);
+    if (result.redirectTo) {
+      router.replace(result.redirectTo);
+      return false;
     }
-    setError(lastError);
-    return false;
+
+    if (!result.ok) {
+      setError(result.error ?? "ステータス更新に失敗しました。");
+      return false;
+    }
+
+    return true;
   };
 
   const onToggle = () => {
@@ -223,7 +171,6 @@ export default function AssignmentStatusButton({
             <TaskResourceDeleteButton
               taskId={taskId}
               groupId={groupId}
-              apiUrl={apiUrl}
               textOnly
             />
           </div>

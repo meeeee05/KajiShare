@@ -529,7 +529,6 @@ export default async function EvaluationsPage() {
                           <AssignmentEvaluationForm
                             assignmentId={assignment.id}
                             taskId={task.id ?? assignment.taskId}
-                            apiUrl={apiUrl}
                           />
                         </td>
                       </tr>

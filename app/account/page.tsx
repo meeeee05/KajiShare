@@ -11,7 +11,6 @@ export default async function AccountPage() {
 
   const user = session.user;
   const isGuest = (session.user as { isGuest?: boolean } | undefined)?.isGuest;
-  const apiUrl = process.env.API_URL;
 
   return (
     <div className="prose max-w-none p-4 sm:p-6">
@@ -41,7 +40,7 @@ export default async function AccountPage() {
         ) : null}
       </div>
 
-      {!isGuest ? <AccountDeleteButton apiUrl={apiUrl} /> : null}
+      {!isGuest ? <AccountDeleteButton /> : null}
     </div>
   );
 }

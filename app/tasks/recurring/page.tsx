@@ -21,6 +21,14 @@ type MembershipItem = {
   userId?: string;
   role?: string;
 };
+type RecurringTask = {
+  id: string;
+  name: string;
+  description?: string;
+  point: number;
+  day_of_week?: number;
+  starts_on: string;
+};
 
 // nullでないか
 const asRecord = (value: unknown): AnyRecord | null => {
@@ -101,6 +109,39 @@ const normalizeMemberships = (payload: unknown): MembershipItem[] =>
       role: pickFirstString(membership, ["role"]),
     };
   });
+
+const toInt = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : undefined;
+};
+
+const normalizeRecurringTask = (row: unknown): RecurringTask | null => {
+  const record = asRecord(row);
+  if (!record) {
+    return null;
+  }
+
+  const id = pickFirstString(record, ["id"]);
+  const name = pickFirstString(record, ["name"]);
+  const point = toInt(record.point);
+  const startsOn = pickFirstString(record, ["starts_on"]);
+
+  if (!id || !name || point == null || !startsOn) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    description: pickFirstString(record, ["description"]),
+    point,
+    day_of_week: toInt(record.day_of_week),
+    starts_on: startsOn,
+  };
+};
+
+const normalizeRecurringTasks = (payload: unknown): RecurringTask[] =>
+  dataArray(payload).flatMap((row) => normalizeRecurringTask(row) ?? []);
 
 export default async function RecurringTasksPage({
   searchParams,
@@ -209,8 +250,15 @@ export default async function RecurringTasksPage({
         </div>
       ) : (
         <div className="not-prose mt-6 space-y-5">
-          {sortedGroups.map((group) => {
+          {await Promise.all(sortedGroups.map(async (group) => {
             const canManage = adminGroupIds.has(normalizeText(group.id));
+            const recurringTasks = group.id
+              ? normalizeRecurringTasks(
+                  await fetchOkJson(
+                    `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
+                  ),
+                )
+              : [];
 
             return (
               <section
@@ -230,12 +278,12 @@ export default async function RecurringTasksPage({
 
                 <RecurringTaskManager
                   groupId={group.id}
-                  apiUrl={apiUrl}
                   canManage={canManage}
+                  initialRows={recurringTasks}
                 />
               </section>
             );
-          })}
+          }))}
         </div>
       )}
     </div>

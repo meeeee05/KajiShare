@@ -1,16 +1,14 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { Pencil } from "lucide-react";
 import Link from "next/link";
-import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
+import { updateGroupFieldAction } from "@/app/actions";
 
 type EditableField = "name" | "assign_mode" | "balance_type";
 type Props = {
   groupId?: string;
   shareKey?: string;
-  apiUrl?: string;
   field: EditableField;
   value?: string;
   textClassName?: string;
@@ -116,7 +114,6 @@ const normalizeDraftValue = (field: EditableField, value: string) => {
 export default function GroupEditableField({
   groupId,
   shareKey,
-  apiUrl,
   field,
   value,
   textClassName,
@@ -124,7 +121,6 @@ export default function GroupEditableField({
   linkHref,
 }: Props) {
   const router = useRouter();
-  const { data: session } = useSession();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -166,66 +162,33 @@ export default function GroupEditableField({
 
     startTransition(async () => {
       setError(null);
-      const token = (session?.user as any)?.idToken as string | undefined;
-      const base = apiUrl?.replace(/\/+$/, "");
-      const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
-
-      if (!base || !token) {
-        setError("認証情報またはAPI設定が不足しています。");
-        return;
-      }
 
       if (!groupId) {
         setError("グループIDが取得できないため更新できません。");
         return;
       }
 
-      const updateBody: { group: Record<string, string> } = {
-        group: {
-          [field]: normalizeDraftValue(field, trimmed),
-        },
-      };
+      const result = await updateGroupFieldAction({
+        groupId,
+        field,
+        value: normalizeDraftValue(field, trimmed),
+      });
 
-      const endpoint = `${v1Base}/groups/${encodeURIComponent(groupId)}`;
-      const attempts: Array<"PATCH" | "PUT"> = ["PATCH", "PUT"];
-
-      let lastMessage = `${label}の更新に失敗しました。時間をおいて再度お試しください。`;
-
-      for (const method of attempts) {
-        const res = await fetch(endpoint, {
-          method,
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(updateBody),
-        }).catch(() => null);
-
-        if (!res) {
-          continue;
-        }
-
-        if (
-          await handleGuestSessionExpiryResponse({
-            response: res,
-            sessionUser: session?.user,
-            onRedirect: (path) => router.replace(path),
-          })
-        ) {
-          return;
-        }
-
-        if (res.ok) {
-          setEditing(false);
-          router.refresh();
-          return;
-        }
-
-        const data = await res.json().catch(() => null);
-        lastMessage = pickErrorMessage(data, label, res.status);
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
+        return;
       }
 
-      setError(lastMessage);
+      if (result.ok) {
+        setEditing(false);
+        router.refresh();
+        return;
+      }
+
+      setError(
+        result.error ??
+          pickErrorMessage(result.payload, label, result.status || 500),
+      );
       return;
     });
   };

@@ -676,7 +676,6 @@ export default async function RecordsPage() {
                               taskId={task.id}
                               groupId={group.id}
                               currentStatus={task.assignmentStatus}
-                              apiUrl={apiUrl}
                               showDeleteWhenCompleted
                               localOnly
                             />
@@ -686,7 +685,6 @@ export default async function RecordsPage() {
                               taskId={task.id}
                               groupId={group.id}
                               currentStatus={task.assignmentStatus}
-                              apiUrl={apiUrl}
                               showDeleteWhenCompleted
                               localOnly={!task.assignmentId}
                             />

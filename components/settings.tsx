@@ -14,6 +14,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { getNotificationsAction } from "@/app/actions";
 
 //　ユーザーメニューと通知アイコンを表示
 const POLLING_INTERVAL_MS = 7_000;
@@ -140,7 +141,6 @@ export default function UserButton() {
     null,
   );
   const requestSeqRef = useRef(0);
-  const abortRef = useRef<AbortController | null>(null);
 
   // 通知の既読管理
   const seenKey = useMemo(
@@ -186,9 +186,6 @@ export default function UserButton() {
   // 通知の新着判定
   const fetchLatestNotification = useCallback(async () => {
     const seq = ++requestSeqRef.current;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
 
     if (!session) {
       if (seq === requestSeqRef.current) {
@@ -199,18 +196,10 @@ export default function UserButton() {
       return;
     }
 
-    const params = new URLSearchParams({
-      limit: String(NOTIFICATIONS_LIMIT),
-    });
+    const result = await getNotificationsAction({ limit: NOTIFICATIONS_LIMIT });
+    if (result.redirectTo || !result.ok) return;
 
-    const res = await fetch(`/api/notifications?${params.toString()}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    }).catch(() => null);
-
-    if (!res?.ok) return;
-
-    const payload = (await res.json().catch(() => null)) as unknown;
+    const payload = result.payload;
     const viewerUserId = extractViewerUserId(payload);
     if (viewerUserId && sessionUser?.id && viewerUserId !== sessionUser.id) return;
     if (seq !== requestSeqRef.current) return;
@@ -263,7 +252,6 @@ export default function UserButton() {
     window.addEventListener("focus", onFocus);
 
     return () => {
-      abortRef.current?.abort();
       window.clearInterval(timer);
       window.removeEventListener("kajishare:task-assigned", onTaskAssigned);
       window.removeEventListener("focus", onFocus);

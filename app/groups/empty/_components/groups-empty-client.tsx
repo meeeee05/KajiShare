@@ -2,92 +2,16 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
-
-type Props = {
-  apiUrl?: string;
-};
-type SessionUser = {
-  idToken?: string;
-};
-type PostRequest = {
-  endpoint: string;
-  body: unknown;
-  token: string;
-  sessionUser: unknown;
-  onRedirect: (path: string) => void;
-  fallbackError: string;
-};
+import { createGroupAction, joinGroupAction } from "@/app/actions";
 
 const formClass =
   "flex w-full flex-col items-center justify-center gap-2 sm:flex-row sm:gap-0";
 const inputClass =
   "w-full sm:w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mx-auto";
 
-// APIからのエラーメッセージを取得
-const pickErrorMessage = (payload: unknown, fallback: string, status: number) => {
-  const data =
-    payload && typeof payload === "object"
-      ? (payload as Record<string, unknown>)
-      : null;
-
-  if (typeof data?.error === "string" && data.error) {
-    return data.error;
-  }
-  if (typeof data?.message === "string" && data.message) {
-    return data.message;
-  }
-  return `${fallback}(status: ${status})`;
-};
-
-// JSONをPOST
-const postJson = async ({
-  endpoint,
-  body,
-  token,
-  sessionUser,
-  onRedirect,
-  fallbackError,
-}: PostRequest) => {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  }).catch(() => null);
-
-  if (!res) {
-    return { ok: false, redirected: false, error: fallbackError };
-  }
-
-  if (
-    await handleGuestSessionExpiryResponse({
-      response: res,
-      sessionUser,
-      onRedirect,
-    })
-  ) {
-    return { ok: false, redirected: true, error: undefined };
-  }
-
-  const data = await res.json().catch(() => null);
-
-  if (res.ok) {
-    return { ok: true, redirected: false, error: undefined };
-  }
-  return {
-    ok: false,
-    redirected: false,
-    error: pickErrorMessage(data, fallbackError, res.status),
-  };
-};
-
 // トークン取得
-export default function GroupsEmptyClient({ apiUrl }: Props) {
+export default function GroupsEmptyClient() {
   const [groupName, setGroupName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
@@ -95,13 +19,8 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
   const [inviteCode, setInviteCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const router = useRouter();
-  const { data: session } = useSession();
-  const sessionUser = session?.user as SessionUser | undefined;
   const searchParams = useSearchParams();
   const showBackLink = searchParams.get("from") === "groups";
-  const base = apiUrl?.replace(/\/+$/, "");
-  const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
-  const token = sessionUser?.idToken;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -116,22 +35,10 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
     setError(null);
 
     try {
-      if (!base || !token) {
-        setError("認証情報またはAPI設定が不足しています。");
-        return;
-      }
+      const result = await createGroupAction({ name: trimmed });
 
-      const result = await postJson({
-        endpoint: `${v1Base}/groups`,
-        body: { group: { name: trimmed } },
-        token,
-        sessionUser,
-        onRedirect: (path) => router.replace(path),
-        fallbackError:
-          "グループの登録に失敗しました。時間をおいて再度お試しください。",
-      });
-
-      if (result.redirected) {
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
         return;
       }
       if (!result.ok) {
@@ -161,21 +68,10 @@ export default function GroupsEmptyClient({ apiUrl }: Props) {
     setJoinError(null);
 
     try {
-      if (!base || !token) {
-        setJoinError("認証情報またはAPI設定が不足しています。");
-        return;
-      }
+      const result = await joinGroupAction({ shareKey: trimmed });
 
-      const result = await postJson({
-        endpoint: `${v1Base}/groups/join`,
-        body: { share_key: trimmed },
-        token,
-        sessionUser,
-        onRedirect: (path) => router.replace(path),
-        fallbackError: "グループ参加に失敗しました。招待IDをご確認ください。",
-      });
-
-      if (result.redirected) {
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
         return;
       }
       if (!result.ok) {

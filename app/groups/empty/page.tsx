@@ -48,5 +48,5 @@ export default async function EmptyGroupsPage() {
     }
   }
 
-  return <GroupsEmptyClient apiUrl={apiUrl} />;
+  return <GroupsEmptyClient />;
 }

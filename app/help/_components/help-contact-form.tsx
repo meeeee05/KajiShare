@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { sendContactAction } from "@/app/actions";
 
 // 入力値を正規化
 export default function HelpContactForm() {
@@ -28,24 +29,15 @@ export default function HelpContactForm() {
     setSuccess(null);
 
     try {
-      const res = await fetch("/api/e-mail", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: trimmedName,
-          email: trimmedEmail,
-          message: trimmedMessage,
-        }),
+      const result = await sendContactAction({
+        name: trimmedName,
+        email: trimmedEmail,
+        message: trimmedMessage,
       });
 
-      const data = await res.json().catch(() => null);
-
-      if (!res.ok) {
+      if (!result.ok) {
         setError(
-          (data as any)?.error ??
-            "送信に失敗しました。時間をおいて再度お試しください。",
+          result.error ?? "送信に失敗しました。時間をおいて再度お試しください。",
         );
         return;
       }

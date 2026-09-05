@@ -295,7 +295,7 @@ export default async function TasksPage() {
             </div>
 
             <div className="mb-4">
-              <GroupTaskCreateButton groupId={group.id} apiUrl={apiUrl} />
+              <GroupTaskCreateButton groupId={group.id} />
             </div>
 
             {tasks.length === 0 ? (
@@ -340,7 +340,6 @@ export default async function TasksPage() {
                               <TaskResourceDeleteButton
                                 taskId={task.sourceTaskId}
                                 groupId={group.id}
-                                apiUrl={apiUrl}
                                 resourceType="recurring"
                               />
                             ) : (
@@ -350,7 +349,6 @@ export default async function TasksPage() {
                             <TaskResourceDeleteButton
                               taskId={task.id}
                               groupId={group.id}
-                              apiUrl={apiUrl}
                             />
                           )}
                         </td>

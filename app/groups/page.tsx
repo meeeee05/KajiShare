@@ -270,7 +270,6 @@ export default async function GroupsPage() {
             <GroupEditableField
               groupId={group.id}
               shareKey={group.share_key}
-              apiUrl={apiUrl}
               field="name"
               value={group.name}
               textClassName="text-lg font-bold"
@@ -295,7 +294,6 @@ export default async function GroupsPage() {
                 <GroupEditableField
                   groupId={group.id}
                   shareKey={group.share_key}
-                  apiUrl={apiUrl}
                   field="assign_mode"
                   value={group.assign_mode}
                   textClassName="font-medium text-sm sm:text-base break-all"
@@ -310,7 +308,6 @@ export default async function GroupsPage() {
                   <GroupEditableField
                     groupId={group.id}
                     shareKey={group.share_key}
-                    apiUrl={apiUrl}
                     field="balance_type"
                     value={group.balancedType}
                     textClassName="font-medium break-all"
@@ -340,7 +337,6 @@ export default async function GroupsPage() {
                   groupId={group.id}
                   shareKey={group.share_key}
                   groupName={group.name}
-                  apiUrl={apiUrl}
                 />
               </div>
             </div>

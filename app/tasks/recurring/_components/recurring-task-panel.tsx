@@ -1,10 +1,17 @@
 "use client";
-import { FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
+import {
+  deleteRecurringTaskAction,
+  getRecurringTaskAction,
+  saveRecurringTaskAction,
+} from "@/app/actions";
 
-type Props = { groupId?: string; apiUrl?: string; canManage: boolean };
+type Props = {
+  groupId?: string;
+  canManage: boolean;
+  initialRows: RecurringTask[];
+};
 type RecurringTask = { id: string; name: string; description?: string; point: number; day_of_week?: number; starts_on: string };
 type FormValues = { name: string; description: string; point: string; starts_on: string; day_of_week: string };
 
@@ -134,45 +141,27 @@ function FieldError({ message }: { message?: string }) {
   return message ? <span className="text-xs text-red-600">{message}</span> : null;
 }
 
-// タスク作成と割り振り作成
-export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Props) {
+export default function RecurringTaskManager({
+  groupId,
+  canManage,
+  initialRows,
+}: Props) {
   const router = useRouter();
-  const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
-  const [rows, setRows] = useState<RecurringTask[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState<RecurringTask[]>(initialRows);
   const [showForm, setShowForm] = useState(false);
   const [formValues, setFormValues] = useState<FormValues>(defaultFormValues);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const token = (session?.user as { idToken?: string } | undefined)?.idToken;
-  const v1Base = useMemo(() => {
-    const base = apiUrl?.replace(/\/+$/, "");
-    return base?.endsWith("/api/v1") ? base : base ? `${base}/api/v1` : undefined;
-  }, [apiUrl]);
-
-  const requestJson = useCallback(
-    async (url: string, init?: RequestInit) => {
-      const res = await fetch(url, {
-        ...init,
-        headers: { Authorization: `Bearer ${token}`, ...init?.headers },
-      }).catch(() => null);
-
-      if (!res) {
-        return { res: null, payload: null, redirected: false };
-      }
-      const redirected = await handleGuestSessionExpiryResponse({ response: res, sessionUser: session?.user, onRedirect: (path) => router.replace(path) });
-      const payload = redirected ? null : await res.json().catch(() => null);
-      return { res, payload, redirected };
-    },
-    [router, session?.user, token],
-  );
+  useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
 
   const requireConfig = () => {
-    if (groupId && v1Base && token) return true;
-    setNotice("認証情報またはAPI設定が不足しています。");
+    if (groupId) return true;
+    setNotice("グループIDが取得できません。");
     return false;
   };
 
@@ -180,48 +169,32 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
     setShowForm(false); setEditingId(null); setFormErrors({}); setNotice(null);
   };
 
-  const loadRows = useCallback(() => {
-    if (!groupId || !v1Base || !token) {
-      return;
-    }
-    setLoading(true);
-    setNotice(null);
-    requestJson(`${v1Base}/groups/${encodeURIComponent(groupId)}/recurring_tasks`, {
-      cache: "no-store",
-    })
-      .then(({ res, payload, redirected }) => {
-        if (redirected) return;
-        if (!res?.ok) {
-          throw new Error(pickErrorMessage(payload, "周期タスク一覧の取得に失敗しました。", res?.status ?? 0));
-        }
-        setRows(normalizeRows(payload));
-      })
-      .catch((error) => {
-        setNotice(error instanceof Error ? error.message : "一覧取得に失敗しました。");
-      })
-      .finally(() => setLoading(false));
-  }, [groupId, requestJson, token, v1Base]);
-
-  useEffect(() => { loadRows(); }, [loadRows]);
-
   const startCreate = () => {
     setEditingId(null); setShowForm(true); setFormValues(defaultFormValues()); setFormErrors({}); setNotice(null);
   };
 
   const startEdit = (id: string) => {
-    if (!v1Base || !token) return setNotice("認証情報またはAPI設定が不足しています。");
-
     setNotice(null);
     setFormErrors({});
     startTransition(async () => {
-      const { res, payload, redirected } = await requestJson(`${v1Base}/recurring_tasks/${encodeURIComponent(id)}`, { cache: "no-store" });
-      if (redirected) return;
-      if (!res?.ok) {
-        setNotice(pickErrorMessage(payload, "周期タスク詳細の取得に失敗しました。", res?.status ?? 0));
+      const result = await getRecurringTaskAction({ id });
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
+        return;
+      }
+      if (!result.ok) {
+        setNotice(
+          result.error ??
+            pickErrorMessage(
+              result.payload,
+              "周期タスク詳細の取得に失敗しました。",
+              result.status || 500,
+            ),
+        );
         return;
       }
 
-      const row = normalizeRow(payload);
+      const row = normalizeRow(result.payload);
       if (!row) return setNotice("周期タスク詳細の取得に失敗しました。");
       setEditingId(id);
       setShowForm(true);
@@ -243,23 +216,37 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
     }
 
     startTransition(async () => {
-      const endpoint = editingId
-        ? `${v1Base}/recurring_tasks/${encodeURIComponent(editingId)}`
-        : `${v1Base}/groups/${encodeURIComponent(groupId!)}/recurring_tasks`;
-      const { res, payload, redirected } = await requestJson(endpoint, { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload(formValues)) });
+      const result = await saveRecurringTaskAction({
+        groupId: groupId!,
+        editingId,
+        body: buildPayload(formValues),
+      });
 
-      if (redirected) return;
-      if (res?.status === 422) {
-        setFormErrors(mapApiErrors(payload));
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
+        return;
+      }
+      if (result.status === 422) {
+        setFormErrors(mapApiErrors(result.payload));
         setNotice("入力内容を確認してください。");
         return;
       }
-      if (res?.status === 403) {
-        setNotice(pickErrorMessage(payload, "操作権限がありません。", res.status));
+      if (result.status === 403) {
+        setNotice(
+          result.error ??
+            pickErrorMessage(result.payload, "操作権限がありません。", result.status),
+        );
         return;
       }
-      if (!res?.ok) {
-        setNotice(pickErrorMessage(payload, "周期タスクの保存に失敗しました。", res?.status ?? 0));
+      if (!result.ok) {
+        setNotice(
+          result.error ??
+            pickErrorMessage(
+              result.payload,
+              "周期タスクの保存に失敗しました。",
+              result.status || 500,
+            ),
+        );
         return;
       }
 
@@ -268,24 +255,44 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
       setEditingId(null);
       setShowForm(false);
       setFormValues(defaultFormValues());
-      loadRows();
+      const saved = normalizeRow(result.payload);
+      if (saved) {
+        setRows((prev) =>
+          editingId
+            ? prev.map((row) => (row.id === saved.id ? saved : row))
+            : [...prev, saved],
+        );
+      }
+      router.refresh();
     });
   };
 
   const onDelete = (id: string) => {
-    if (!v1Base || !token) return setNotice("認証情報またはAPI設定が不足しています。");
     if (!canManage) return setNotice("管理者のみ操作できます。");
     if (!window.confirm("この周期タスクを削除しますか？")) return;
 
     startTransition(async () => {
-      const { res, payload, redirected } = await requestJson(`${v1Base}/recurring_tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (redirected) return;
-      if (res?.status === 403) {
-        setNotice(pickErrorMessage(payload, "操作権限がありません。", res.status));
+      const result = await deleteRecurringTaskAction({ id });
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
         return;
       }
-      if (!res?.ok) {
-        setNotice(pickErrorMessage(payload, "周期タスク削除に失敗しました。", res?.status ?? 0));
+      if (result.status === 403) {
+        setNotice(
+          result.error ??
+            pickErrorMessage(result.payload, "操作権限がありません。", result.status),
+        );
+        return;
+      }
+      if (!result.ok) {
+        setNotice(
+          result.error ??
+            pickErrorMessage(
+              result.payload,
+              "周期タスク削除に失敗しました。",
+              result.status || 500,
+            ),
+        );
         return;
       }
 
@@ -316,8 +323,7 @@ export default function RecurringTaskManager({ groupId, apiUrl, canManage }: Pro
       {!canManage && (
         <p className="mb-2 text-xs text-slate-500">編集・削除は管理者のみ操作できます。</p>
       )}
-      {loading && <p className="text-xs text-slate-500">読み込み中...</p>}
-      {!loading && rows.length === 0 && (
+      {rows.length === 0 && (
         <p className="mb-3 text-xs text-slate-500">周期タスクはまだありません。</p>
       )}
 

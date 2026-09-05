@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { GUEST_EXPIRED_MESSAGE } from "@/lib/guest-session";
-import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
+import { getNotificationsAction } from "@/app/actions";
 
 // 型定義
 type NotificationType = "member_joined" | "task_assigned" | "task_evaluated";
@@ -250,49 +250,30 @@ export default function NotificationsClient({
 
   const requestSeqRef = useRef(0);
   const activeUserRef = useRef(currentUserId);
-  const abortRef = useRef<AbortController | null>(null);
   const notificationsRef = useRef<NotificationItem[]>(initialItems);
   const initializedUserRef = useRef(initialUserId);
 
   const fetchNotifications = useCallback(async () => {
     const seq = ++requestSeqRef.current;
     const requestUser = currentUserId;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
 
     try {
-      const params = new URLSearchParams({
-        limit: String(limit),
+      const result = await getNotificationsAction({
+        limit,
+        debug: debugMode,
       });
-      if (debugMode) {
-        params.set("debug", "1");
-      }
 
-      const response = await fetch(
-        `/api/notifications?${params.toString()}`,
-        {
-          cache: "no-store",
-          signal: controller.signal,
-        },
-      );
-
-      if (
-        await handleGuestSessionExpiryResponse({
-          response,
-          sessionUser: session?.user,
-          onRedirect: (path) => router.replace(path),
-        })
-      ) {
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
         setError(GUEST_EXPIRED_MESSAGE);
         return;
       }
 
-      if (!response.ok) {
+      if (!result.ok) {
         throw new Error("notify fetch failed");
       }
 
-      const payload = (await response.json()) as unknown;
+      const payload = result.payload;
 
       if (
         seq !== requestSeqRef.current ||
@@ -320,11 +301,7 @@ export default function NotificationsClient({
       setDebugPayload(payload);
       setDebugInfo(asRecord(payload)?.debug as DebugEnvelope["debug"]);
       setError(null);
-    } catch (error) {
-      if ((error as { name?: string } | null)?.name === "AbortError") {
-        return;
-      }
-
+    } catch {
       if (
         seq !== requestSeqRef.current ||
         requestUser !== activeUserRef.current
@@ -395,7 +372,6 @@ export default function NotificationsClient({
     }, 30_000);
 
     return () => {
-      abortRef.current?.abort();
       window.clearInterval(timer);
     };
   }, [fetchNotifications]);

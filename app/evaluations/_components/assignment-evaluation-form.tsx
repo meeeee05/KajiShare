@@ -2,13 +2,11 @@
 
 import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { handleGuestSessionExpiryResponse } from "@/lib/guest-session-client";
+import { createEvaluationAction } from "@/app/actions";
 
 type Props = {
   assignmentId?: string;
   taskId?: string;
-  apiUrl?: string;
 };
 
 const defaultError = "評価の登録に失敗しました。";
@@ -49,10 +47,8 @@ const removeEvaluationRow = (
 export default function AssignmentEvaluationForm({
   assignmentId,
   taskId,
-  apiUrl,
 }: Props) {
   const router = useRouter();
-  const { data: session } = useSession();
   const [isPending, startTransition] = useTransition();
   const [score, setScore] = useState("3");
   const [comment, setComment] = useState("");
@@ -83,56 +79,25 @@ export default function AssignmentEvaluationForm({
       setError(null);
       setInfo(null);
 
-      const token = (session?.user as { idToken?: string } | undefined)
-        ?.idToken;
-      const base = apiUrl?.replace(/\/+$/, "");
-      const v1Base = base?.endsWith("/api/v1") ? base : `${base}/api/v1`;
+      const result = await createEvaluationAction({
+        assignmentId,
+        score: parsedScore,
+        comment: comment.trim(),
+      });
 
-      if (!base || !token) {
-        setError("認証情報またはAPI設定が不足しています。");
+      if (result.redirectTo) {
+        router.replace(result.redirectTo);
         return;
       }
 
-      const endpoint = `${v1Base}/assignments/${encodeURIComponent(assignmentId)}/evaluations`;
-      const payload = {
-        evaluation: {
-          score: parsedScore,
-          comment: comment.trim(),
-        },
-      };
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      }).catch(() => null);
-
-      if (!res) {
-        setError("評価の登録に失敗しました。ネットワークをご確認ください。");
-        return;
-      }
-
-      if (
-        await handleGuestSessionExpiryResponse({
-          response: res,
-          sessionUser: session?.user,
-          onRedirect: (path) => router.replace(path),
-        })
-      ) {
-        return;
-      }
-
-      if (res.ok) {
+      if (result.ok) {
         setComment("");
         setScore("3");
         removeEvaluationRow(formElement, taskId);
         return;
       }
 
-      if (res.status === 422) {
+      if (result.status === 422) {
         setInfo("評価済み");
         setTimeout(() => {
           removeEvaluationRow(formElement, taskId);
@@ -140,8 +105,10 @@ export default function AssignmentEvaluationForm({
         return;
       }
 
-      const data = await res.json().catch(() => null);
-      setError(pickErrorMessage(data, res.status));
+      setError(
+        result.error ??
+          pickErrorMessage(result.payload, result.status || 500),
+      );
     });
   };
 
