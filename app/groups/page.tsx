@@ -130,10 +130,11 @@ const unwrapJsonApiResource = (item: unknown) => {
 };
 
 const normalizeGroup = (item: unknown, index: number): GroupListItem => {
-  const group = asRecord(item);
+  const resource = asRecord(item);
+  const group = unwrapJsonApiResource(item);
 
   return {
-    id: pickFirstString(group, ["id"]),
+    id: pickFirstString(resource, ["id"]) ?? pickFirstString(group, ["id"]),
     name: pickFirstString(group, ["name"]) ?? `グループ ${index + 1}`,
     share_key: pickFirstString(group, ["share_key"]),
     assign_mode: normalizeAssignMode(pickFirstString(group, ["assign_mode"])),
@@ -152,9 +153,7 @@ const normalizeMembership = (item: unknown): MembershipItem => {
 };
 
 const normalizeGroups = (groupsPayload: unknown): GroupListItem[] =>
-  toDataArray(groupsPayload).map((item, index) =>
-    normalizeGroup(item, index),
-  );
+  toDataArray(groupsPayload).map((item, index) => normalizeGroup(item, index));
 
 export default async function GroupsPage() {
   const session = await auth();

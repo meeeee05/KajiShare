@@ -41,8 +41,18 @@ export default async function EmptyGroupsPage() {
     }
 
     if (res?.ok) {
-      const memberships = await res.json();
-      if (Array.isArray(memberships) && memberships.length > 0) {
+      const payload: unknown = await res.json();
+      const root =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? (payload as Record<string, unknown>)
+          : null;
+      const memberships = Array.isArray(payload)
+        ? payload
+        : Array.isArray(root?.data)
+          ? root.data
+          : [];
+
+      if (memberships.length > 0) {
         redirect("/");
       }
     }

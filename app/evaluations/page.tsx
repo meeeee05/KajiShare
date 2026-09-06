@@ -89,14 +89,6 @@ const pickRelationshipId = (value: unknown, key: string) => {
   return pickFirstString(data, ["id"]);
 };
 
-const toTopLevelArray = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  return [];
-};
-
 const toJsonApiDataArray = (payload: unknown): unknown[] => {
   const root = asRecord(payload);
   if (!root) {
@@ -106,8 +98,8 @@ const toJsonApiDataArray = (payload: unknown): unknown[] => {
 };
 
 const normalizeGroup = (row: unknown): GroupItem => ({
-  id: pickTopLevelString(row, ["id"]),
-  name: pickTopLevelString(row, ["name"]) ?? "",
+  id: pickResourceId(row) ?? pickAttribute(row, ["id"]),
+  name: pickAttribute(row, ["name"]) ?? pickTopLevelString(row, ["name"]) ?? "",
 });
 
 const normalizeMembership = (row: unknown): MembershipItem => ({
@@ -257,7 +249,7 @@ export default async function EvaluationsPage() {
 
   const groups = Array.from(
     new Map(
-      toTopLevelArray(groupsPayload)
+      toJsonApiDataArray(groupsPayload)
         .map((row) => normalizeGroup(row))
         .filter((group) => group.name.trim().length > 0)
         .map((group) => [
@@ -296,10 +288,9 @@ export default async function EvaluationsPage() {
   const memberships = toJsonApiDataArray(membershipsPayload).map((row) =>
     normalizeMembership(row),
   );
-  const normalizedEvaluations =
-    toJsonApiDataArray(evaluationsPayload).map((row) =>
-      normalizeEvaluation(row),
-    );
+  const normalizedEvaluations = toJsonApiDataArray(evaluationsPayload).map(
+    (row) => normalizeEvaluation(row),
+  );
 
   // 評価対象から自分自身を除外
   const apiUser = extractCurrentUserIdentity(mePayload);
@@ -310,10 +301,7 @@ export default async function EvaluationsPage() {
     email?: string | null;
   };
   const currentUser: MemberItem = {
-    id:
-      apiUser.id ??
-      su.id ??
-      su.userId,
+    id: apiUser.id ?? su.id ?? su.userId,
     name: apiUser.name ?? su.name ?? undefined,
     email: apiUser.email ?? su.email ?? undefined,
   };

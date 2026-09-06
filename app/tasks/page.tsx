@@ -86,12 +86,16 @@ const topLevelArray = (payload: unknown): unknown[] =>
 const normalizeGroups = (payload: unknown): GroupItem[] =>
   dataArray(payload)
     .map((row): GroupItem | null => {
-      const group = asRecord(row);
+      const resource = asRecord(row);
+      const group = unwrapEntity(resource);
       const name = pickFirstString(group, ["name"]);
       if (!name) {
         return null;
       }
-      return { id: pickFirstString(group, ["id"]), name };
+      return {
+        id: pickFirstString(resource, ["id"]) ?? pickFirstString(group, ["id"]),
+        name,
+      };
     })
     .filter((group): group is GroupItem => Boolean(group));
 

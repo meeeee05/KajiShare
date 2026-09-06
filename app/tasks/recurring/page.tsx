@@ -87,13 +87,14 @@ const pickRelationshipId = (row: unknown, key: string) => {
 const normalizeGroups = (payload: unknown): GroupItem[] =>
   dataArray(payload)
     .map((row): GroupItem | null => {
-      const group = asRecord(row);
+      const resource = asRecord(row);
+      const group = unwrapEntity(resource);
       const name = pickFirstString(group, ["name"]);
       if (!name) {
         return null;
       }
       return {
-        id: pickFirstString(group, ["id"]),
+        id: pickFirstString(resource, ["id"]) ?? pickFirstString(group, ["id"]),
         name,
       };
     })
@@ -250,40 +251,42 @@ export default async function RecurringTasksPage({
         </div>
       ) : (
         <div className="not-prose mt-6 space-y-5">
-          {await Promise.all(sortedGroups.map(async (group) => {
-            const canManage = adminGroupIds.has(normalizeText(group.id));
-            const recurringTasks = group.id
-              ? normalizeRecurringTasks(
-                  await fetchOkJson(
-                    `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
-                  ),
-                )
-              : [];
+          {await Promise.all(
+            sortedGroups.map(async (group) => {
+              const canManage = adminGroupIds.has(normalizeText(group.id));
+              const recurringTasks = group.id
+                ? normalizeRecurringTasks(
+                    await fetchOkJson(
+                      `${v1Base}/groups/${encodeURIComponent(group.id)}/recurring_tasks`,
+                    ),
+                  )
+                : [];
 
-            return (
-              <section
-                key={group.id ?? group.name}
-                className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-950 sm:p-5"
-              >
-                <div className="mb-3 flex items-center gap-2">
-                  <h2 className="text-lg font-bold tracking-tight">
-                    {group.name}
-                  </h2>
-                  {selectedGroupId && group.id === selectedGroupId ? (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200">
-                      選択中
-                    </span>
-                  ) : null}
-                </div>
+              return (
+                <section
+                  key={group.id ?? group.name}
+                  className="rounded-xl border bg-white p-4 shadow-sm dark:bg-slate-950 sm:p-5"
+                >
+                  <div className="mb-3 flex items-center gap-2">
+                    <h2 className="text-lg font-bold tracking-tight">
+                      {group.name}
+                    </h2>
+                    {selectedGroupId && group.id === selectedGroupId ? (
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-200">
+                        選択中
+                      </span>
+                    ) : null}
+                  </div>
 
-                <RecurringTaskManager
-                  groupId={group.id}
-                  canManage={canManage}
-                  initialRows={recurringTasks}
-                />
-              </section>
-            );
-          }))}
+                  <RecurringTaskManager
+                    groupId={group.id}
+                    canManage={canManage}
+                    initialRows={recurringTasks}
+                  />
+                </section>
+              );
+            }),
+          )}
         </div>
       )}
     </div>

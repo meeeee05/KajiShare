@@ -133,13 +133,14 @@ const toNumericId = (value?: string) => {
 const normalizeGroups = (payload: unknown): GroupItem[] =>
   dataArray(payload)
     .map((row): GroupItem | null => {
+      const resource = asRecord(row);
       const group = attributesOf(row);
       const name = pickString(group, ["name"]);
       if (!name) {
         return null;
       }
       return {
-        id: pickString(group, ["id"]),
+        id: pickString(resource, ["id"]) ?? pickString(group, ["id"]),
         name,
       };
     })
@@ -235,8 +236,14 @@ const summarizeAssignments = (
 // 表示用に最新のアサインメントを選ぶ
 const latestAssignment = (assignments: AssignmentItem[]) => {
   return [...assignments].sort((a, b) => {
-    const bTime = Math.max(toTimestamp(b.dueDate), toTimestamp(b.completedDate));
-    const aTime = Math.max(toTimestamp(a.dueDate), toTimestamp(a.completedDate));
+    const bTime = Math.max(
+      toTimestamp(b.dueDate),
+      toTimestamp(b.completedDate),
+    );
+    const aTime = Math.max(
+      toTimestamp(a.dueDate),
+      toTimestamp(a.completedDate),
+    );
     return bTime - aTime;
   })[0];
 };
@@ -369,7 +376,8 @@ export default async function Home() {
           .filter((task) => task.id)
           .map((task) => [normalizeText(task.id), task]),
       );
-      const assignments = dataArray(assignmentsPayload).map(normalizeAssignment);
+      const assignments =
+        dataArray(assignmentsPayload).map(normalizeAssignment);
       const assignmentsByTaskId = new Map<string, AssignmentItem[]>();
 
       // タスクIDごとにアサインメントをまとめる
@@ -384,7 +392,9 @@ export default async function Home() {
         ]);
       }
 
-      const myMembershipId = myMembershipIdByGroupId.get(normalizeText(group.id));
+      const myMembershipId = myMembershipIdByGroupId.get(
+        normalizeText(group.id),
+      );
 
       // 表示用
       const taskCards = tasks.map((task) => {

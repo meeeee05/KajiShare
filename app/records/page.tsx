@@ -120,12 +120,15 @@ const normalizeBalanceType = (value?: string): GroupItem["balanceType"] => {
 // グループ一覧の取得
 const normalizeGroups = (payload: unknown): GroupItem[] =>
   dataArray(payload).flatMap((row) => {
-    const group = asRecord(row);
+    const resource = asRecord(row);
+    const group = unwrapEntity(resource);
     const name = pickFirstString(group, ["name"]);
     return name
       ? [
           {
-            id: pickFirstString(group, ["id"]),
+            id:
+              pickFirstString(resource, ["id"]) ??
+              pickFirstString(group, ["id"]),
             name,
             shareKey: pickFirstString(group, ["share_key"]),
             assignMode: normalizeAssignMode(
