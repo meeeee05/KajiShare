@@ -57,7 +57,7 @@ type EvaluatedTaskItem = {
   task: TaskItem;
   evaluationId?: string;
   score?: string;
-  feedback?: string;
+  comment?: string;
 };
 
 const RECENT_ASSIGNED_TASK_LIMIT = 5;
@@ -260,7 +260,7 @@ const normalizeEvaluation = (row: unknown) => {
     evaluatedUserId: pickString(evaluation, ["evaluated_user_id"]),
     evaluatorId: pickString(evaluation, ["evaluator_id"]),
     score: pickString(evaluation, ["score"]),
-    feedback: pickString(evaluation, ["feedback"]),
+    comment: pickString(evaluation, ["comment"]),
     createdAt: pickString(evaluation, ["created_at"]),
   };
 };
@@ -494,7 +494,7 @@ export default async function Home() {
         },
         evaluationId: evaluation.id,
         score: evaluation.score,
-        feedback: evaluation.feedback,
+        comment: evaluation.comment,
       };
     });
 
@@ -663,7 +663,7 @@ export default async function Home() {
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {evaluatedMyExecutedTasks.map(
-                ({ group, evaluationId, score, feedback, task }, index) => (
+                ({ group, evaluationId, score, comment, task }, index) => (
                   <div
                     key={evaluationId ?? `${task.id ?? "task"}-${index}`}
                     className="rounded-lg border p-3"
@@ -678,7 +678,7 @@ export default async function Home() {
                       評価: {score ?? "-"}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {feedback ?? "コメントなし"}
+                      {comment ?? "コメントなし"}
                     </p>
                   </div>
                 ),
