@@ -1,4 +1,5 @@
 import HelpContactForm from "./_components/help-contact-form";
+import Link from "next/link";
 
 export default function HelpPage() {
   return (
@@ -26,6 +27,12 @@ export default function HelpPage() {
       <div className="not-prose w-full max-w-[390px] sm:max-w-xl">
         <HelpContactForm />
       </div>
+
+      <p className="mt-10 text-sm">
+        個人情報の取り扱いについては、
+        <Link href="/privacy">プライバシーポリシー</Link>
+        をご確認ください。
+      </p>
     </div>
   );
 }

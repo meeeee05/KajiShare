@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { useEffect } from "react";
@@ -69,6 +70,13 @@ export default function SignInClient() {
         >
           ゲストログイン
         </button>
+        <p className="text-center text-xs leading-relaxed text-muted-foreground">
+          個人情報の取り扱いについては、
+          <Link href="/privacy" className="text-blue-600 hover:underline">
+            プライバシーポリシー
+          </Link>
+          をご確認ください。
+        </p>
       </div>
     </div>
   );

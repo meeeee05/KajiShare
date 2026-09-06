@@ -8,6 +8,7 @@ export default function Header() {
   const isSimpleHeader =
     pathname === "/auth/signin" ||
     pathname === "/auth/timeout" ||
+    pathname === "/privacy" ||
     pathname === "/groups/empty";
   const disableLogoLink = pathname === "/groups/empty";
 
